@@ -1,24 +1,31 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
-import { Icon } from '../ui/icons';
 import { EmailComposer, type Signature } from '../editor/composer/EmailComposer';
-import RecipientInput from './RecipientInput';
 import { DEFAULT_TOOLBAR, type ToolbarItem } from '../editor/composer/Toolbar';
 import { ImageStore } from '../editor/images';
 import type { EmailOutput, QuotedOriginal } from '../editor/serialize';
+import { useConfirm } from '../ui/confirm-context';
+import { Icon } from '../ui/icons';
+import { useToast } from '../ui/toast-context';
+import RecipientInput from './RecipientInput';
 
 export interface ComposeInit {
   title?: string;
   to?: string;
   cc?: string;
+  bcc?: string;
   subject?: string;
   /** Original message for replies and forwards; kept apart from the typed text. */
   quoted?: QuotedOriginal;
   /** Short notice shown above the editor (for example, attachments that are not forwarded). */
   note?: string;
+  /** A saved draft being continued: its id (replaced on save, removed on send) and its body. */
+  draftId?: string;
+  initialHtml?: string;
 }
 
 const split = (s: string) => s.split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean);
+const AUTOSAVE_MS = 30_000;
 
 /** Same custom button as the composer demo (FOX-051). */
 const insertDate: ToolbarItem = {
@@ -38,59 +45,156 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-export default function Compose({ init, onClose, onSent, signatures, defaultSignatureId }: {
+/**
+ * Compose window. Closing it never loses work (FOX-055): unsent changes are saved to the
+ * Drafts folder, also every 30 seconds while writing. Only Discard throws a message away,
+ * after a confirmation.
+ */
+export default function Compose({ init, onClose, onSent, onDraftSaved, signatures, defaultSignatureId }: {
   init: ComposeInit;
   onClose: () => void;
   onSent?: () => void;
+  onDraftSaved?: () => void;
   signatures?: Record<string, Signature>;
   defaultSignatureId?: string;
 }) {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [to, setTo] = useState(init.to ?? '');
   const [cc, setCc] = useState(init.cc ?? '');
-  const [bcc, setBcc] = useState('');
+  const [bcc, setBcc] = useState(init.bcc ?? '');
   const [showCc, setShowCc] = useState(!!init.cc);
-  const [showBcc, setShowBcc] = useState(false);
+  const [showBcc, setShowBcc] = useState(!!init.bcc);
   const [subject, setSubject] = useState(init.subject ?? '');
   const [err, setErr] = useState('');
   const [sending, setSending] = useState(false);
+  const [status, setStatus] = useState<'' | 'saving' | 'saved' | 'failed'>(init.draftId ? 'saved' : '');
   const images = useMemo(() => new ImageStore(), []);
-  const typed = useRef(false);
+  const output = useRef<EmailOutput | null>(null);
+  const draftId = useRef(init.draftId);
+  // What is already safe (saved, or untouched since opening). Until the user first types,
+  // the baseline follows the editor, which reports its start-up content (signature included).
+  const baseline = useRef<string | null>(null);
+  const interacted = useRef(false);
+  const saving = useRef<Promise<void> | null>(null);
 
-  const dirty = () =>
-    typed.current || to !== (init.to ?? '') || cc !== (init.cc ?? '') || bcc !== '' || subject !== (init.subject ?? '');
+  const snapshot = () => JSON.stringify([to, cc, bcc, subject, output.current?.html ?? '']);
+  const dirty = () => baseline.current !== null && snapshot() !== baseline.current;
 
-  // COMP-016: warn before leaving the page with an unsent message.
+  async function inlineImages(out: EmailOutput) {
+    return Promise.all(
+      out.contentIds.map(async (contentId) => {
+        const img = images.get(contentId)!;
+        return { contentId, filename: img.name, contentType: img.blob.type, data: await blobToBase64(img.blob) };
+      }),
+    );
+  }
+
+  async function saveDraft(): Promise<void> {
+    if (saving.current) await saving.current; // one save at a time
+    if (!dirty()) return;
+    const out = output.current;
+    const snap = snapshot();
+    setStatus('saving');
+    const run = (async () => {
+      try {
+        const res = await api.saveDraft({
+          to: split(to), cc: split(cc), bcc: split(bcc), subject,
+          text: out?.text ?? '', html: out?.html, inlineImages: out ? await inlineImages(out) : [],
+          replaceId: draftId.current,
+        });
+        draftId.current = res.id;
+        baseline.current = snap;
+        setStatus('saved');
+        onDraftSaved?.();
+      } catch (e) {
+        setStatus('failed');
+        throw e;
+      } finally {
+        saving.current = null;
+      }
+    })();
+    saving.current = run;
+    return run;
+  }
+
+  // Latest saveDraft for the timer and the page-leave warning.
+  const saveRef = useRef(saveDraft);
+  const dirtyRef = useRef(dirty);
   useEffect(() => {
+    saveRef.current = saveDraft;
+    dirtyRef.current = dirty;
+  });
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (dirtyRef.current()) saveRef.current().catch(() => undefined); // status shows the failure
+    }, AUTOSAVE_MS);
+    // COMP-016: the browser cannot wait for a save while the page closes, so warn instead.
     const onUnload = (e: BeforeUnloadEvent) => {
-      if (!dirty()) return;
+      if (!dirtyRef.current()) return;
       e.preventDefault();
       e.returnValue = '';
     };
     window.addEventListener('beforeunload', onUnload);
-    return () => window.removeEventListener('beforeunload', onUnload);
-  });
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('beforeunload', onUnload);
+    };
+  }, []);
 
-  const close = () => {
-    if (dirty() && !window.confirm('Discard this message?')) return;
+  /** Close = keep: unsaved changes go to Drafts first. */
+  async function close() {
+    if (sending) return;
+    if (!dirty()) {
+      onClose();
+      return;
+    }
+    try {
+      await saveDraft();
+      toast('success', 'Saved to Drafts. Open the Drafts folder to finish it later.');
+      onClose();
+    } catch (e) {
+      const leave = await confirm({
+        title: 'The draft could not be saved',
+        message: `${(e as Error).message} If you close now, this message is lost.`,
+        confirmLabel: 'Close without saving',
+        cancelLabel: 'Keep writing',
+        danger: true,
+      });
+      if (leave) onClose();
+    }
+  }
+
+  async function discard() {
+    if (!dirty() && !draftId.current) {
+      onClose();
+      return;
+    }
+    const ok = await confirm({
+      title: 'Discard this message?',
+      message: draftId.current ? 'The saved draft is deleted too. This cannot be undone.' : 'What you have written will be lost. This cannot be undone.',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Keep writing',
+      danger: true,
+    });
+    if (!ok) return;
+    if (draftId.current) await api.deleteDraft(draftId.current).catch(() => undefined);
+    toast('info', 'Message discarded.');
     onClose();
-  };
+  }
 
   async function send(out: EmailOutput) {
     setErr('');
     const recipients = split(to);
     if (!recipients.length) {
-      setErr('Add at least one recipient.');
+      setErr('Add at least one recipient in the To field.');
       return;
     }
     setSending(true);
     try {
-      const inlineImages = await Promise.all(
-        out.contentIds.map(async (contentId) => {
-          const img = images.get(contentId)!;
-          return { contentId, filename: img.name, contentType: img.blob.type, data: await blobToBase64(img.blob) };
-        }),
-      );
-      await api.send({ to: recipients, cc: split(cc), bcc: split(bcc), subject, text: out.text, html: out.html, inlineImages });
+      if (saving.current) await saving.current.catch(() => undefined);
+      await api.send({ to: recipients, cc: split(cc), bcc: split(bcc), subject, text: out.text, html: out.html, inlineImages: await inlineImages(out), draftId: draftId.current });
       onSent?.();
       onClose();
     } catch (e) {
@@ -100,20 +204,34 @@ export default function Compose({ init, onClose, onSent, signatures, defaultSign
     }
   }
 
+  const statusText = { '': '', saving: 'Saving…', saved: 'Saved to Drafts', failed: 'Not saved' }[status];
+  const markInteracted = () => {
+    interacted.current = true;
+  };
+
   return (
     <div className="modal" onKeyDown={(e) => e.key === 'Escape' && close()}>
-      <section className="compose-window" role="dialog" aria-modal="true" aria-labelledby="compose-title">
+      <section
+        className="compose-window"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="compose-title"
+        onKeyDownCapture={markInteracted}
+        onPasteCapture={markInteracted}
+        onDropCapture={markInteracted}
+      >
         <header className="compose-head">
           <h3 id="compose-title">{init.title ?? 'New message'}</h3>
-          <button type="button" className="ghost icon" aria-label="Close" title="Close" onClick={close}>{Icon.x}</button>
+          <span className={`draft-status ${status}`} aria-live="polite">{statusText}</span>
+          <button type="button" className="ghost icon" aria-label="Close (your message is saved to Drafts)" data-tip="Close. Your message is kept in Drafts." onClick={close}>{Icon.x}</button>
         </header>
 
         <div className="compose-fields">
           <label className="compose-line">
             <span>To</span>
             <RecipientInput label="To" value={to} onChange={setTo} autoFocus={!init.to} />
-            {!showCc && <button type="button" className="link" onClick={() => setShowCc(true)}>Cc</button>}
-            {!showBcc && <button type="button" className="link" onClick={() => setShowBcc(true)}>Bcc</button>}
+            {!showCc && <button type="button" className="link" data-tip="Add people who should get a copy" onClick={() => setShowCc(true)}>Cc</button>}
+            {!showBcc && <button type="button" className="link" data-tip="Add people who get a hidden copy" onClick={() => setShowBcc(true)}>Bcc</button>}
           </label>
           {showCc && (
             <label className="compose-line">
@@ -129,7 +247,7 @@ export default function Compose({ init, onClose, onSent, signatures, defaultSign
           )}
           <label className="compose-line">
             <span className="sr-only">Subject</span>
-            <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" />
+            <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" maxLength={998} />
           </label>
         </div>
 
@@ -137,16 +255,20 @@ export default function Compose({ init, onClose, onSent, signatures, defaultSign
         {err && <div className="error compose-error" role="alert">{err}</div>}
 
         <EmailComposer
+          initialContent={init.initialHtml}
           quoted={init.quoted}
           images={images}
           toolbar={TOOLBAR}
           signatures={signatures}
-          defaultSignatureId={defaultSignatureId}
+          // A continued draft already contains its signature.
+          defaultSignatureId={init.initialHtml === undefined ? defaultSignatureId : undefined}
           sending={sending}
-          // Typed content only: the quoted original is not part of the editor document.
-          onChange={(_out, json) => { typed.current = JSON.stringify(json).includes('"text"') || JSON.stringify(json).includes('"image"'); }}
+          onChange={(out) => {
+            output.current = out;
+            if (!interacted.current) baseline.current = JSON.stringify([to, cc, bcc, subject, out.html]);
+          }}
           onSend={send}
-          onDiscard={close}
+          onDiscard={discard}
         />
       </section>
     </div>

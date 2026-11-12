@@ -36,7 +36,7 @@ export default function MessageView({ msg, flagged, onToggleFlag }: { msg: Messa
             className={`icon-btn star ${flagged ? 'on' : ''}`}
             aria-pressed={flagged}
             aria-label={flagged ? 'Remove star' : 'Star this message'}
-            title={flagged ? 'Remove star' : 'Star this message'}
+            data-tip={flagged ? 'Remove star' : 'Star this message'}
             onClick={onToggleFlag}
           >
             {Icon.star}
@@ -69,7 +69,7 @@ export default function MessageView({ msg, flagged, onToggleFlag }: { msg: Messa
       {files.length > 0 && (
         <footer className="attachments" aria-label="Attachments">
           {files.map((a) => (
-            <a key={a.part} className="chip" href={api.attachmentUrl(msg.id, a.part)} download title={`Download ${a.filename}`}>
+            <a key={a.part} className="chip" href={api.attachmentUrl(msg.id, a.part)} download data-tip={`Download ${a.filename}`}>
               {Icon.paperclip}
               <span className="ellipsis">{a.filename}</span>
               <small>{a.size < 1024 ? `${a.size} B` : `${Math.ceil(a.size / 1024)} KB`}</small>

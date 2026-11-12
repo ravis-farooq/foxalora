@@ -101,6 +101,7 @@ export default function RecipientInput({ label, value, onChange, autoFocus }: { 
                   <strong className="ellipsis">{s.name || s.email}</strong>
                   {s.name && <small className="ellipsis">{s.email}</small>}
                 </span>
+                {s.source === 'recent' && <span className="badge-soft" title="You have written to this address before">Recent</span>}
               </li>
             );
           })}

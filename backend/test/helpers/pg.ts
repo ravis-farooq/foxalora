@@ -37,12 +37,15 @@ function withDatabase(url: string, db: string, user?: string, password?: string)
 
 export async function createTestDatabase(): Promise<TestDatabase> {
   const name = `fx_test_${randomBytes(6).toString('hex')}`;
-  const admin = createDb(PG_OWNER_URL, 1);
+  const admin = createDb(PG_OWNER_URL, 1); // one connection, so the advisory lock below holds
+  // Test files run in parallel; role changes touch one shared catalog row, so take turns.
+  await sql`SELECT pg_advisory_lock(727001)`.execute(admin);
   await sql`DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'foxalora_app') THEN
       CREATE ROLE foxalora_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
     END IF; END $$`.execute(admin);
   await sql`ALTER ROLE foxalora_app PASSWORD ${sql.lit(APP_PASSWORD)}`.execute(admin);
+  await sql`SELECT pg_advisory_unlock(727001)`.execute(admin);
   await sql`CREATE DATABASE ${sql.id(name)}`.execute(admin);
   await sql`GRANT CONNECT ON DATABASE ${sql.id(name)} TO foxalora_app`.execute(admin);
   await admin.destroy();

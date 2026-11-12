@@ -13,9 +13,13 @@ export interface Preferences {
   density: 'comfortable' | 'compact';
   /** 'auto' uses the browser's time zone. */
   timeZone: string;
+  /** Keep the addresses written to, for recipient suggestions. */
+  rememberRecipients: boolean;
+  /** The first-run guide was finished or skipped. */
+  onboarded: boolean;
 }
 
-export const DEFAULT_PREFERENCES: Preferences = { displayName: '', theme: 'system', density: 'comfortable', timeZone: 'auto' };
+export const DEFAULT_PREFERENCES: Preferences = { displayName: '', theme: 'system', density: 'comfortable', timeZone: 'auto', rememberRecipients: true, onboarded: false };
 
 const TIME_ZONES = new Set([...Intl.supportedValuesOf('timeZone'), 'UTC']);
 
@@ -27,6 +31,8 @@ const CHECKS: { [K in keyof Preferences]: Check } = {
   theme: (v) => v === 'system' || v === 'light' || v === 'dark',
   density: (v) => v === 'comfortable' || v === 'compact',
   timeZone: (v) => typeof v === 'string' && (v === 'auto' || TIME_ZONES.has(v)),
+  rememberRecipients: (v) => typeof v === 'boolean',
+  onboarded: (v) => typeof v === 'boolean',
 };
 const KEYS = Object.keys(CHECKS) as (keyof Preferences)[];
 

@@ -41,6 +41,8 @@ does not use TLS and behaves differently from production servers (`docs/PROTOTYP
 The API trusts the test CA through `NODE_EXTRA_CA_CERTS`; certificate verification stays on.
 Ports 143, 993, 587 and 465 must be free on the machine.
 
+New developers: start with `docs/DEVELOPER_HANDOFF.md` (setup, test accounts, rules, how to contribute).
+
 Mail servers and domains are managed with the operator CLI: `node dist/cli.js help`.
 Progress and test status: `docs/PROTOTYPE_RESULTS.md` (Phase 0), `docs/PHASE1_PROGRESS.md` (Phase 1).
 
@@ -69,11 +71,15 @@ Progress and test status: `docs/PROTOTYPE_RESULTS.md` (Phase 0), `docs/PHASE1_PR
 | CONT contacts: create, edit, delete, search, several addresses; vCard import and export; suggestions while typing recipients | `backend/src/contacts/`, `frontend/src/components/Contacts.tsx`, `RecipientInput.tsx` |
 | PREF display name (used in From), theme, density, time zone; reset | `backend/src/preferences/`, `frontend/src/components/Settings.tsx` |
 | Signatures: rich text, default per mailbox, cleaned on save | `backend/src/preferences/signature-content.ts`, `frontend/src/components/SignatureEditor.tsx` |
+| COMP drafts: saved on close and every 30 s, continue, discard with confirmation, removed after send | `backend/src/mail/outgoing.ts`, `mail.service.ts#saveDraft`, `frontend/src/components/Compose.tsx` |
+| Delete with Undo; confirmation dialogs for actions that cannot be undone | `frontend/src/ui/ConfirmProvider.tsx`, `Mailbox.tsx` |
+| Recipient suggestions from contacts and address history (opt-out, clear) | `backend/src/contacts/recipients.service.ts`, `RecipientInput.tsx` |
+| First-run guide, tooltips on hover and focus, skip link, visual-only feedback | `frontend/src/components/Guide.tsx`, `frontend/src/ui/TooltipLayer.tsx` |
 
 ## Deliberately NOT in the prototype
 
-CSV contact import, frequently used addresses, filtered and cross-folder search, drafts,
-attachments on send, moving messages, bulk actions, threading, IMAP IDLE/connection pooling, admin UI,
+CSV contact import, filtered and cross-folder search, attachments on send,
+moving messages with a folder picker, bulk actions, threading, IMAP IDLE/connection pooling, admin UI,
 installer wizard, i18n/RTL, SSO adapters, separate-origin email rendering,
 Docker image for the app, most tests (only backend security unit tests exist).
 All are in the Development Backlog.

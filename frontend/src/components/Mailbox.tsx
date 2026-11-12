@@ -4,6 +4,7 @@ import { folderIcon, folderLabel, sortFolders } from '../mail/folders';
 import { avatarOf, displayName, formatAddr, forwardSubject, fullDate, replyAllRecipients, replySubject, shortDate } from '../mail/format';
 import { Icon, Logo } from '../ui/icons';
 import { Menu } from '../ui/Menu';
+import { useConfirm } from '../ui/confirm-context';
 import { useToast } from '../ui/toast-context';
 import type { ComposeInit } from './Compose';
 import MessageView from './MessageView';
@@ -14,7 +15,8 @@ const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 // m.html was sanitized by the server; plain-text messages are escaped here.
 const quotedHtml = (m: MessageFull) => m.html ?? esc(m.text).replace(/\n/g, '<br>');
 
-export default function Mailbox({ email, onCompose }: { email: string; onCompose: (init: ComposeInit) => void }) {
+export default function Mailbox({ email, onCompose, version }: { email: string; onCompose: (init: ComposeInit) => void; version: number }) {
+  const confirm = useConfirm();
   const toast = useToast();
   const [folders, setFolders] = useState<Folder[]>([]);
   const [folder, setFolder] = useState('INBOX');
@@ -31,10 +33,13 @@ export default function Mailbox({ email, onCompose }: { email: string; onCompose
   // Only the newest list or message request may update the screen.
   const listSeq = useRef(0);
   const openSeq = useRef(0);
+  // Where the list is, for refreshes started elsewhere (a draft saved, a message sent).
+  const view = useRef({ folder: 'INBOX', page: 1, query: '' });
 
   const current = folders.find((f) => f.path === folder);
   const label = current ? folderLabel(current) : folder === 'INBOX' ? 'Inbox' : folder;
   const summary = list.items.find((m) => m.id === selected);
+  const inDrafts = current?.specialUse === '\\Drafts';
 
   const loadFolders = useCallback(() => {
     api.folders().then(setFolders, (e: Error) => toast('error', e.message));
@@ -42,6 +47,7 @@ export default function Mailbox({ email, onCompose }: { email: string; onCompose
 
   const loadList = useCallback(
     (f: string, p: number, q: string) => {
+      view.current = { folder: f, page: p, query: q };
       const seq = ++listSeq.current;
       setLoading(true);
       setListError('');
@@ -64,6 +70,15 @@ export default function Mailbox({ email, onCompose }: { email: string; onCompose
       .catch((e: Error) => seq === listSeq.current && setListError(e.message))
       .finally(() => seq === listSeq.current && setLoading(false));
   }, [loadFolders]);
+
+  // Another part of the app changed mail (draft saved, message sent): refresh counts and the list.
+  useEffect(() => {
+    if (!version) return;
+    loadFolders();
+    const { folder: f, page: p, query: q } = view.current;
+    const seq = ++listSeq.current;
+    api.list(f, p, q).then((r) => seq === listSeq.current && setList({ items: r.items, total: r.total }), () => undefined);
+  }, [version, loadFolders]);
 
   // Phone layout: Escape closes the folder drawer.
   useEffect(() => {
@@ -188,17 +203,56 @@ export default function Mailbox({ email, onCompose }: { email: string; onCompose
   async function remove() {
     if (!selected) return;
     const id = selected;
+    const from = folder;
     const inTrash = current?.specialUse === '\\Trash';
-    if (inTrash && !window.confirm('Delete this message permanently? This cannot be undone.')) return;
+    if (inTrash) {
+      const ok = await confirm({
+        title: 'Delete this message for good?',
+        message: 'It is already in Trash, so it cannot be restored afterwards.',
+        confirmLabel: 'Delete for good',
+        danger: true,
+      });
+      if (!ok) return;
+    }
     try {
-      await api.remove(id);
+      const { trashId } = await api.remove(id);
       setList((l) => ({ items: l.items.filter((x) => x.id !== id), total: Math.max(0, l.total - 1) }));
       closeMessage();
       loadFolders();
-      toast('success', inTrash ? 'Message deleted permanently.' : 'Message moved to Trash.');
+      if (inTrash) toast('success', 'Message deleted for good.');
+      else {
+        // Moving to Trash is easy to undo, so it needs no confirmation.
+        toast('success', 'Message moved to Trash.', trashId ? {
+          label: 'Undo',
+          run: () => {
+            api.move(trashId, from).then(
+              () => {
+                toast('success', 'Message restored.');
+                loadFolders();
+                loadList(view.current.folder, view.current.page, view.current.query);
+              },
+              (e: Error) => toast('error', e.message),
+            );
+          },
+        } : undefined);
+      }
     } catch (e) {
       toast('error', (e as Error).message);
     }
+  }
+
+  function continueDraft() {
+    if (!msg) return;
+    const list = (a?: { name: string; address: string }[]) => (a ?? []).map((x) => x.address).join(', ');
+    onCompose({
+      title: 'Draft',
+      to: list(msg.to),
+      cc: list(msg.cc),
+      bcc: list(msg.bcc),
+      subject: msg.subject === '(no subject)' ? '' : msg.subject,
+      initialHtml: quotedHtml(msg),
+      draftId: msg.id,
+    });
   }
 
   async function mark(change: { seen?: boolean; flagged?: boolean }) {
@@ -222,8 +276,8 @@ export default function Mailbox({ email, onCompose }: { email: string; onCompose
   const sorted = sortFolders(folders);
 
   return (
-    <div className={`mail-view ${drawer ? 'drawer-open' : ''} ${selected ? 'has-message' : ''}`}>
-      <aside className="folders" aria-label="Folders">
+    <main id="main" tabIndex={-1} className={`mail-view ${drawer ? 'drawer-open' : ''} ${selected ? 'has-message' : ''}`}>
+      <aside className="folders" aria-label="Folders" data-guide="folders">
         <div className="pane-head account">
           <span className="avatar small" style={{ '--h': avatarOf({ name: '', address: email }).hue } as CSSProperties} aria-hidden="true">
             {avatarOf({ name: '', address: email }).letter}
@@ -253,7 +307,7 @@ export default function Mailbox({ email, onCompose }: { email: string; onCompose
       <section className="list" aria-label={`${label} messages`}>
         <div className="pane-head">
           <button type="button" className="icon-btn only-mobile" aria-label="Show folders" onClick={() => setDrawer(true)}>{Icon.menu}</button>
-          <form role="search" className="search" onSubmit={runSearch}>
+          <form role="search" className="search" onSubmit={runSearch} data-guide="search">
             {Icon.search}
             <input
               type="search"
@@ -267,7 +321,7 @@ export default function Mailbox({ email, onCompose }: { email: string; onCompose
               <button type="button" className="icon-btn" aria-label="Clear search" onClick={clearSearch}>{Icon.x}</button>
             )}
           </form>
-          <button type="button" className="icon-btn" aria-label="Refresh" title="Refresh" onClick={refresh}>{Icon.refresh}</button>
+          <button type="button" className="icon-btn" aria-label="Refresh" data-tip="Check for new mail" onClick={refresh}>{Icon.refresh}</button>
         </div>
 
         <div className="list-title">
@@ -337,16 +391,23 @@ export default function Mailbox({ email, onCompose }: { email: string; onCompose
       </section>
 
       <section className="reader" aria-label="Message">
-        <div className="pane-head toolbar" role="toolbar" aria-label="Message actions">
+        <div className="pane-head toolbar" role="toolbar" aria-label="Message actions" data-guide="toolbar">
           <button type="button" className="icon-btn only-mobile" aria-label="Back to list" onClick={closeMessage}>{Icon.back}</button>
-          <ToolButton icon={Icon.reply} label="Reply" disabled={!msg} onClick={() => reply(false)} />
-          <ToolButton icon={Icon.replyAll} label="Reply all" disabled={!msg} onClick={() => reply(true)} />
-          <ToolButton icon={Icon.forward} label="Forward" disabled={!msg} onClick={forward} />
+          {inDrafts ? (
+            <ToolButton icon={Icon.pen} label="Continue writing" tip="Open this draft to finish and send it" disabled={!msg} onClick={continueDraft} />
+          ) : (
+            <>
+              <ToolButton icon={Icon.reply} label="Reply" tip="Reply to the sender" disabled={!msg} onClick={() => reply(false)} />
+              <ToolButton icon={Icon.replyAll} label="Reply all" tip="Reply to the sender and everyone else on the message" disabled={!msg} onClick={() => reply(true)} />
+              <ToolButton icon={Icon.forward} label="Forward" tip="Send this message on to someone else" disabled={!msg} onClick={forward} />
+            </>
+          )}
           <span className="tool-sep" />
-          <ToolButton icon={Icon.trash} label="Delete" disabled={!selected} onClick={remove} />
+          <ToolButton icon={Icon.trash} label="Delete" tip={current?.specialUse === '\\Trash' ? 'Delete for good' : 'Move to Trash (you can undo this)'} disabled={!selected} onClick={remove} />
           <Menu
             label="Mark"
             icon={Icon.tag}
+            tip="Mark as read or unread, or add a star"
             disabled={!summary}
             items={[
               summary?.seen
@@ -375,13 +436,13 @@ export default function Mailbox({ email, onCompose }: { email: string; onCompose
         </div>
       </section>
 
-    </div>
+    </main>
   );
 }
 
-function ToolButton({ icon, label, disabled, onClick }: { icon: ReactNode; label: string; disabled?: boolean; onClick: () => void }) {
+function ToolButton({ icon, label, tip, disabled, onClick }: { icon: ReactNode; label: string; tip?: string; disabled?: boolean; onClick: () => void }) {
   return (
-    <button type="button" className="tool-btn" disabled={disabled} onClick={onClick} title={label}>
+    <button type="button" className="tool-btn" disabled={disabled} onClick={onClick} data-tip={tip ?? label}>
       {icon}
       <span className="tool-label">{label}</span>
     </button>

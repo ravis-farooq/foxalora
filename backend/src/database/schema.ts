@@ -69,6 +69,12 @@ export interface ContactAddressesTable extends MailboxOwned {
   position: ColumnType<number, number | undefined, number>;
 }
 
+export interface RecentRecipientsTable extends MailboxOwned {
+  email: string;
+  use_count: ColumnType<number, number | undefined, number>;
+  last_used: ColumnType<Date, Date | undefined, Date>;
+}
+
 export interface SystemSettingsTable {
   id: Generated<string>;
   tenant_id: string;
@@ -96,6 +102,7 @@ export interface Database {
   signatures: SignaturesTable;
   contacts: ContactsTable;
   contact_addresses: ContactAddressesTable;
+  recent_recipients: RecentRecipientsTable;
   system_settings: SystemSettingsTable;
   audit_events: AuditEventsTable;
 }

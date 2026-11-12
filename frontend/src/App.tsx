@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { api } from './api';
 import Login from './components/Login';
 import Shell from './components/Shell';
+import { ConfirmProvider } from './ui/ConfirmProvider';
 import { ToastProvider } from './ui/Toasts';
+import { TooltipLayer } from './ui/TooltipLayer';
 
 export default function App() {
   const [email, setEmail] = useState<string | null>(null);
@@ -15,6 +17,7 @@ export default function App() {
   if (checking) return <div className="center muted">Loading…</div>;
   return (
     <ToastProvider>
+      <ConfirmProvider>
       {email ? (
         <Shell
           email={email}
@@ -26,6 +29,8 @@ export default function App() {
       ) : (
         <Login onLogin={setEmail} />
       )}
+      </ConfirmProvider>
+      <TooltipLayer />
     </ToastProvider>
   );
 }

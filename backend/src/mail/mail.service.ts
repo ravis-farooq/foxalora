@@ -5,14 +5,12 @@ import { safeFilename } from '../security/filename';
 import { sanitizeEmailHtml } from '../security/sanitize';
 import { MailboxCreds, openImap, withSmtp } from './connections';
 import { decodePart } from './decode-part';
-import { validateInlineImages } from './inline-images';
 import { MailError, normalizeMailError } from './mail-errors';
 import { assertFolder, decodeMessageId, encodeMessageId, type MessageRef } from './message-id';
+import { buildDraftMime, parseOutgoing, type Outgoing, type OutgoingInput } from './outgoing';
 import { MAX_SEARCH_RESULTS, searchCriteria } from './search';
-import { EMAIL_RE } from '../common/email';
 
 const MAX_PAGE_SIZE = 100;
-const MAX_RECIPIENTS = 100;
 // Fetch policy (CLAUDE.md rule 10, D1): only text parts are read when a message is
 // opened, each capped; attachments are streamed one part at a time, on request.
 const MAX_TEXT_BYTES = Number(process.env.MAIL_MAX_TEXT_BYTES ?? 2 * 1024 * 1024);
@@ -268,56 +266,102 @@ export class MailService {
     });
   }
 
-  async deleteMessage(c: MailboxCreds, id: unknown) {
-    await this.withMessage(c, id, async (client, ref) => {
+  /** Moves to Trash (returns the id there, for Undo), or deletes for good when already in Trash. */
+  async deleteMessage(c: MailboxCreds, id: unknown): Promise<{ trashId: string | null }> {
+    return this.withMessage(c, id, async (client, ref) => {
       const boxes = await client.list();
       const trash = boxes.find((b) => b.specialUse === '\\Trash');
       if (trash && trash.path !== ref.folder) {
-        await client.messageMove(String(ref.uid), trash.path, { uid: true });
-      } else {
-        await client.messageDelete(String(ref.uid), { uid: true }); // already in Trash: permanent
+        const res = await client.messageMove(String(ref.uid), trash.path, { uid: true });
+        const newUid = res && res.uidMap?.get(ref.uid);
+        return { trashId: res && newUid && res.uidValidity ? encodeMessageId(trash.path, res.uidValidity, newUid) : null };
       }
+      await client.messageDelete(String(ref.uid), { uid: true }); // already in Trash: permanent
+      return { trashId: null };
     });
   }
 
-  async send(
-    c: MailboxCreds,
-    m: { to: string[]; cc?: string[]; bcc?: string[]; subject: string; text?: string; html?: string; inlineImages?: unknown },
-    fromName?: string,
-  ) {
-    if (!m || typeof m !== 'object') throw new BadRequestException('invalid message');
-    const clean = (list?: unknown) => {
-      if (list !== undefined && !Array.isArray(list)) throw new BadRequestException('recipients must be a list');
-      const out = ((list as unknown[] | undefined) ?? []).map((s) => String(s).trim()).filter(Boolean);
-      for (const a of out) if (!EMAIL_RE.test(a)) throw new BadRequestException(`invalid address: ${a}`);
-      return out;
-    };
-    const to = clean(m.to), cc = clean(m.cc), bcc = clean(m.bcc);
-    if (!to.length) throw new BadRequestException('at least one recipient required');
-    if (to.length + cc.length + bcc.length > MAX_RECIPIENTS) throw new BadRequestException('too many recipients');
-    if (typeof m.subject !== 'string' || m.subject.length > 998 || /[\r\n]/.test(m.subject)) {
-      throw new BadRequestException('invalid subject'); // header-injection guard
-    }
-
-    const html = typeof m.html === 'string' && m.html ? sanitizeEmailHtml(m.html) : undefined;
-    // Inline images from the editor (cid:), validated by sniffed type and size (rule 11).
-    const attachments = validateInlineImages(m.inlineImages, html ?? '');
-
+  async send(c: MailboxCreds, m: OutgoingInput, fromName?: string): Promise<Outgoing> {
+    const out = parseOutgoing(m, 'send');
     try {
       await withSmtp(c, (t) =>
         t.sendMail({
           // From is ALWAYS the authenticated mailbox: users cannot spoof other senders (prototype policy).
           // The name is validated in preferences (no control characters, no address look-alikes).
           from: fromName ? { name: fromName, address: c.email } : c.email,
-          to, cc, bcc,
-          subject: m.subject,
-          text: typeof m.text === 'string' ? m.text : '',
-          html,
-          attachments,
+          to: out.to, cc: out.cc, bcc: out.bcc,
+          subject: out.subject,
+          text: out.text,
+          html: out.html,
+          attachments: out.attachments,
+          disableFileAccess: true,
+          disableUrlAccess: true,
         }),
       );
     } catch (e) {
       throw normalizeMailError(e);
     }
+    return out;
+  }
+
+  private async specialFolder(client: ImapFlow, use: string): Promise<string> {
+    const box = (await client.list()).find((b) => b.specialUse === use);
+    if (!box) throw new MailError('folder_not_found', 404, `There is no ${use.slice(1)} folder on the mail server.`);
+    return box.path;
+  }
+
+  /**
+   * Saves a draft to the Drafts folder with IMAP APPEND (FOX-055). When `replaceId` names an
+   * earlier version, it is removed after the new one is stored, so nothing is lost if a
+   * step fails. Only messages in the Drafts folder can be replaced.
+   */
+  async saveDraft(c: MailboxCreds, m: OutgoingInput & { replaceId?: unknown }, fromName?: string): Promise<{ id: string }> {
+    const draft = parseOutgoing(m, 'draft');
+    const replace = m.replaceId === undefined || m.replaceId === null ? null : decodeMessageId(m.replaceId);
+    const { raw, messageId } = await buildDraftMime(c.email, fromName, draft);
+    return this.withImap(c, async (client) => {
+      const drafts = await this.specialFolder(client, '\\Drafts');
+      if (replace && replace.folder !== drafts) throw new BadRequestException('only drafts can be replaced');
+      const res = await client.append(drafts, raw, ['\\Draft', '\\Seen']);
+      const lock = await client.getMailboxLock(drafts);
+      try {
+        const uidValidity = BigInt(client.mailbox ? client.mailbox.uidValidity : 0);
+        let uid = res && res.uid && res.uidValidity === uidValidity ? res.uid : undefined;
+        if (!uid) {
+          // No UIDPLUS: find the new draft by its Message-ID.
+          const found = (await client.search({ header: { 'message-id': messageId } }, { uid: true })) || [];
+          uid = found.sort((a, b) => b - a)[0];
+        }
+        if (!uid) throw new MailError('mail_protocol_error', 502, 'The mail server did not confirm the saved draft.');
+        if (replace && replace.uidValidity === uidValidity && replace.uid !== uid) {
+          await client.messageDelete(String(replace.uid), { uid: true });
+        }
+        return { id: encodeMessageId(drafts, uidValidity, uid) };
+      } finally {
+        lock.release();
+      }
+    });
+  }
+
+  /** Removes a draft for good (after sending it, or when the user discards it). */
+  async deleteDraft(c: MailboxCreds, id: unknown): Promise<void> {
+    const ref = decodeMessageId(id);
+    await this.withImap(c, async (client) => {
+      if (ref.folder !== (await this.specialFolder(client, '\\Drafts'))) throw new BadRequestException('not a draft');
+    });
+    await this.withMessage(c, id, (client, r) => client.messageDelete(String(r.uid), { uid: true }).then(() => undefined));
+  }
+
+  /** Moves a message to another existing folder (FOX-035, single message). Returns its new id when the server reports it. */
+  async moveMessage(c: MailboxCreds, id: unknown, folderRaw: unknown): Promise<{ id: string | null }> {
+    const target = assertFolder(folderRaw);
+    const ref = decodeMessageId(id);
+    if (target === ref.folder) return { id: String(id) };
+    return this.withMessage(c, id, async (client) => {
+      if (!(await client.list()).some((b) => b.path === target)) throw new MailError('folder_not_found', 404, 'Folder not found.');
+      const res = await client.messageMove(String(ref.uid), target, { uid: true });
+      const newUid = res && res.uidMap?.get(ref.uid);
+      return { id: res && newUid && res.uidValidity ? encodeMessageId(target, res.uidValidity, newUid) : null };
+    });
   }
 }

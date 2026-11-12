@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Logger, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { AuthedRequest, AuthGuard } from '../auth/auth.guard';
+import { RecipientsService } from '../contacts/recipients.service';
 import { PreferencesService } from '../preferences/preferences.service';
 import { MailService } from './mail.service';
 
@@ -9,12 +10,17 @@ import { MailService } from './mail.service';
  * message id can only ever resolve inside the authenticated user's own mailbox.
  * Message ids are opaque (folder + UIDVALIDITY + UID, see message-id.ts).
  */
+const owner = (req: AuthedRequest) => ({ tenantId: req.mailbox.tenantId, email: req.mailbox.email });
+
 @Controller()
 @UseGuards(AuthGuard)
 export class MailController {
+  private readonly log = new Logger('Mail');
+
   constructor(
     private mail: MailService,
     private prefs: PreferencesService,
+    private recipients: RecipientsService,
   ) {}
 
   @Get('mailboxes')
@@ -54,18 +60,43 @@ export class MailController {
     });
   }
 
+  /** Moves to Trash and returns the id there, so the client can offer Undo. */
   @Delete('messages/:id')
+  remove(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.mail.deleteMessage(req.mailbox, id);
+  }
+
+  @Post('messages/:id/move')
+  @HttpCode(200)
+  move(@Req() req: AuthedRequest, @Param('id') id: string, @Body() body: { folder?: unknown } = {}) {
+    return this.mail.moveMessage(req.mailbox, id, body?.folder);
+  }
+
+  @Post('drafts')
+  async saveDraft(@Req() req: AuthedRequest, @Body() body: Record<string, unknown> = {}) {
+    const { displayName } = await this.prefs.get(owner(req));
+    return this.mail.saveDraft(req.mailbox, body ?? {}, displayName || undefined);
+  }
+
+  @Delete('drafts/:id')
   @HttpCode(204)
-  async remove(@Req() req: AuthedRequest, @Param('id') id: string) {
-    await this.mail.deleteMessage(req.mailbox, id);
+  async deleteDraft(@Req() req: AuthedRequest, @Param('id') id: string) {
+    await this.mail.deleteDraft(req.mailbox, id);
   }
 
   @Post('messages/send')
   @HttpCode(202)
-  async send(@Req() req: AuthedRequest, @Body() body: { to: string[]; cc?: string[]; bcc?: string[]; subject: string; text?: string; html?: string; inlineImages?: unknown }) {
+  async send(@Req() req: AuthedRequest, @Body() body: Record<string, unknown> = {}) {
     // The sender name comes from the mailbox's own preferences; the address is always the session's.
-    const { displayName } = await this.prefs.get({ tenantId: req.mailbox.tenantId, email: req.mailbox.email });
-    await this.mail.send(req.mailbox, body, displayName || undefined);
+    const prefs = await this.prefs.get(owner(req));
+    const sent = await this.mail.send(req.mailbox, body ?? {}, prefs.displayName || undefined);
+    // After a successful send: forget the draft and remember the recipients. Neither may fail the send.
+    if (body?.draftId !== undefined) {
+      await this.mail.deleteDraft(req.mailbox, body.draftId).catch(() => this.log.warn('sent draft could not be removed'));
+    }
+    if (prefs.rememberRecipients) {
+      await this.recipients.record(owner(req), [...sent.to, ...sent.cc, ...sent.bcc]).catch(() => this.log.warn('recipient history not updated'));
+    }
     return { status: 'sent' };
   }
 }

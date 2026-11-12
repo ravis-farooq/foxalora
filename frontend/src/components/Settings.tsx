@@ -4,6 +4,7 @@ import { api, type Preferences, type SignatureRecord } from '../api';
 import { serializeEmail } from '../editor/serialize';
 import { Icon } from '../ui/icons';
 import { usePrefs } from '../ui/prefs-context';
+import { useConfirm } from '../ui/confirm-context';
 import { useToast } from '../ui/toast-context';
 import SignatureEditor from './SignatureEditor';
 
@@ -19,17 +20,18 @@ const SECTIONS: { id: Section; label: string; hint: string; icon: ReactNode }[] 
 const TIME_ZONES: string[] = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone') ?? [];
 const BROWSER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-export default function Settings({ email, signatures, onSignaturesChanged, onAbout }: {
+export default function Settings({ email, signatures, onSignaturesChanged, onAbout, onGuide }: {
   email: string;
   signatures: SignatureRecord[];
   onSignaturesChanged: () => void;
   onAbout: () => void;
+  onGuide: () => void;
 }) {
   const [section, setSection] = useState<Section>('general');
   const [open, setOpen] = useState(false); // phones: section list or section content
 
   return (
-    <div className={`settings-view ${open ? 'has-detail' : ''}`}>
+    <main id="main" tabIndex={-1} className={`settings-view ${open ? 'has-detail' : ''}`}>
       <nav className="list settings-nav" aria-label="Settings sections">
         <div className="pane-head"><h1 className="pane-title">Settings</h1></div>
         <ul className="section-list">
@@ -51,13 +53,13 @@ export default function Settings({ email, signatures, onSignaturesChanged, onAbo
         </div>
         <div className="reader-body">
           <div className="settings-content">
-            {section === 'general' && <General email={email} />}
+            {section === 'general' && <General email={email} onGuide={onGuide} />}
             {section === 'appearance' && <Appearance />}
             {section === 'signatures' && <Signatures signatures={signatures} onChanged={onSignaturesChanged} />}
           </div>
         </div>
       </section>
-    </div>
+    </main>
   );
 }
 
@@ -77,9 +79,10 @@ function useSave() {
   };
 }
 
-function General({ email }: { email: string }) {
+function General({ email, onGuide }: { email: string; onGuide: () => void }) {
   const { prefs, reset } = usePrefs();
   const toast = useToast();
+  const confirm = useConfirm();
   const save = useSave();
   const [name, setName] = useState(prefs.displayName);
   const [nameErr, setNameErr] = useState('');
@@ -125,13 +128,43 @@ function General({ email }: { email: string }) {
       </div>
 
       <div className="setting-card">
+        <h3>Address suggestions</h3>
+        <p className="muted small">While you type a recipient, Foxalora suggests your contacts and the addresses you have written to before. Only the address is kept, never the message.</p>
+        <label className="checkbox">
+          <input type="checkbox" checked={prefs.rememberRecipients} onChange={(e) => save({ rememberRecipients: e.target.checked }, e.target.checked ? 'Addresses you write to will be suggested.' : 'New addresses will not be remembered.')} />
+          Remember the addresses I write to
+        </label>
+        <button
+          type="button"
+          className="ghost"
+          onClick={async () => {
+            if (!(await confirm({ title: 'Clear the address history?', message: 'Addresses you have written to are no longer suggested. Your contacts are kept.', confirmLabel: 'Clear history', danger: true }))) return;
+            try {
+              await api.clearRecent();
+              toast('success', 'Address history cleared.');
+            } catch (e) {
+              toast('error', (e as Error).message);
+            }
+          }}
+        >
+          Clear address history
+        </button>
+      </div>
+
+      <div className="setting-card">
+        <h3>Getting started</h3>
+        <p className="muted small">A short tour of the main parts of Foxalora Mail.</p>
+        <button type="button" className="ghost" onClick={onGuide}>Show the welcome guide again</button>
+      </div>
+
+      <div className="setting-card">
         <h3>Reset settings</h3>
         <p className="muted small">Puts name, time zone, theme and density back to the defaults. Signatures and contacts are kept.</p>
         <button
           type="button"
           className="ghost danger-text"
           onClick={async () => {
-            if (!window.confirm('Reset your settings to the defaults?')) return;
+            if (!(await confirm({ title: 'Reset your settings?', message: 'Name, time zone, theme, density and suggestion settings go back to the defaults. Contacts and signatures are kept.', confirmLabel: 'Reset settings', danger: true }))) return;
             try {
               await reset();
               toast('success', 'Settings reset.');
@@ -201,6 +234,7 @@ const previewText = (doc: JSONContent) => serializeEmail(doc).text.trim();
 
 function Signatures({ signatures, onChanged }: { signatures: SignatureRecord[]; onChanged: () => void }) {
   const toast = useToast();
+  const confirm = useConfirm();
   const [editing, setEditing] = useState<(Omit<SignatureRecord, 'id'> & { id?: string }) | null>(null);
 
   async function run(action: () => Promise<unknown>, done: string) {
@@ -242,7 +276,13 @@ function Signatures({ signatures, onChanged }: { signatures: SignatureRecord[]; 
               <div className="row-actions">
                 {!s.isDefault && <button type="button" className="link" onClick={() => run(() => api.updateSignature(s.id, { name: s.name, content: s.content, isDefault: true }), `“${s.name}” is now the default.`)}>Make default</button>}
                 <button type="button" className="link" onClick={() => setEditing(s)}>Edit</button>
-                <button type="button" className="link danger-text" onClick={() => window.confirm(`Delete the signature “${s.name}”?`) && run(() => api.deleteSignature(s.id), 'Signature deleted.')}>Delete</button>
+                <button
+                  type="button"
+                  className="link danger-text"
+                  onClick={async () => (await confirm({ title: `Delete the signature “${s.name}”?`, message: 'Messages you already sent are not changed.', confirmLabel: 'Delete signature', danger: true })) && run(() => api.deleteSignature(s.id), 'Signature deleted.')}
+                >
+                  Delete
+                </button>
               </div>
             </li>
           ))}

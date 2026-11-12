@@ -16,8 +16,9 @@ class FakeMail {
   async verifyLogin({ password }: { password: string }) {
     if (password !== PASSWORD) throw Object.assign(new Error('auth failed'), { code: 'EAUTH' });
   }
-  async send(_c: unknown, _m: unknown, fromName?: string) {
+  async send(_c: unknown, m: { to?: string[]; cc?: string[]; bcc?: string[] }, fromName?: string) {
     this.sent.push({ fromName });
+    return { to: m.to ?? [], cc: m.cc ?? [], bcc: m.bcc ?? [] };
   }
 }
 
@@ -128,7 +129,7 @@ describe.skipIf(!hasPg || !VALKEY)('contacts, preferences and signatures over HT
       expect((await other('GET', `/contacts/export?ids=${id}`)).text).not.toContain('Private');
     }
     expect((await alice('GET', `/contacts/${id}`)).json.displayName).toBe('Private');
-    expect((await alice('GET', '/contacts/suggest?q=priv')).json).toEqual([{ name: 'Private', email: 'private@x.test' }]);
+    expect((await alice('GET', '/contacts/suggest?q=priv')).json).toEqual([{ name: 'Private', email: 'private@x.test', source: 'contact' }]);
   });
 
   it('refuses invalid contacts, bad ids and requests without the CSRF header', async () => {
@@ -154,7 +155,7 @@ describe.skipIf(!hasPg || !VALKEY)('contacts, preferences and signatures over HT
   });
 
   it('stores preferences per mailbox, validates them and uses the display name when sending', async () => {
-    expect((await alice('GET', '/preferences')).json).toEqual({ displayName: '', theme: 'system', density: 'comfortable', timeZone: 'auto' });
+    expect((await alice('GET', '/preferences')).json).toEqual({ displayName: '', theme: 'system', density: 'comfortable', timeZone: 'auto', rememberRecipients: true, onboarded: false });
     expect((await alice('PATCH', '/preferences', { displayName: 'Alice A', theme: 'dark' })).json.theme).toBe('dark');
     expect((await alice('PATCH', '/preferences', { theme: 'pink' })).status).toBe(400);
     expect((await alice('PATCH', '/preferences', { isAdmin: true })).status).toBe(400);
@@ -182,5 +183,22 @@ describe.skipIf(!hasPg || !VALKEY)('contacts, preferences and signatures over HT
     expect((await alice('PUT', `/signatures/${a.json.id}`, { name: 'Work 2', content: doc('Alice'), isDefault: true })).json.isDefault).toBe(true);
     expect((await alice('GET', '/signatures')).json.filter((s: any) => s.isDefault).map((s: any) => s.name)).toEqual(['Work 2']);
     expect((await alice('DELETE', `/signatures/${b.json.id}`)).status).toBe(204);
+  });
+
+  it('remembers addresses written to, per mailbox, and honours opt-out and clearing (FOX-073)', async () => {
+    const send = (who: typeof alice, to: string[], cc: string[] = []) => who('POST', '/messages/send', { to, cc, subject: 'x', text: 'x' });
+    expect((await send(alice, ['Zed.Recent@x.test'], ['alice@a.example', 'zoe@x.test'])).status).toBe(202);
+    await send(alice, ['zoe@x.test']);
+    const s = (await alice('GET', '/contacts/suggest?q=z')).json;
+    // Most used first; stored in lower case; never the user's own address.
+    expect(s).toEqual([{ name: '', email: 'zoe@x.test', source: 'recent' }, { name: '', email: 'zed.recent@x.test', source: 'recent' }]);
+    expect((await alice('GET', '/contacts/suggest?q=alice@')).json).toEqual([]);
+    for (const other of [adam, bob]) expect((await other('GET', '/contacts/suggest?q=z')).json).toEqual([]);
+
+    expect((await alice('DELETE', '/contacts/recent')).status).toBe(204);
+    expect((await alice('GET', '/contacts/suggest?q=z')).json).toEqual([]);
+    await alice('PATCH', '/preferences', { rememberRecipients: false });
+    await send(alice, ['zoe@x.test']);
+    expect((await alice('GET', '/contacts/suggest?q=z')).json).toEqual([]);
   });
 });

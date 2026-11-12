@@ -4,7 +4,7 @@ import { Icon } from './icons';
 export interface MenuItem { label: string; icon?: ReactNode; onSelect: () => void; disabled?: boolean }
 
 /** Toolbar button that opens a small menu (WAI-ARIA menu button: arrows, Escape, outside click). */
-export function Menu({ label, icon, items, disabled }: { label: string; icon: ReactNode; items: MenuItem[]; disabled?: boolean }) {
+export function Menu({ label, icon, items, disabled, tip }: { label: string; icon: ReactNode; items: MenuItem[]; disabled?: boolean; tip?: string }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLUListElement>(null);
@@ -43,7 +43,7 @@ export function Menu({ label, icon, items, disabled }: { label: string; icon: Re
         aria-expanded={open}
         aria-controls={open ? id : undefined}
         disabled={disabled}
-        title={label}
+        data-tip={tip ?? label}
         onClick={() => setOpen((o) => !o)}
       >
         {icon}

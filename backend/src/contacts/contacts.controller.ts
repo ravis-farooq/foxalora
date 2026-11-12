@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, Req, 
 import type { Response } from 'express';
 import { AuthedRequest, AuthGuard } from '../auth/auth.guard';
 import { ContactsService, type Owner } from './contacts.service';
+import { RecipientsService } from './recipients.service';
 
 const owner = (req: AuthedRequest): Owner => ({ tenantId: req.mailbox.tenantId, email: req.mailbox.email });
 
@@ -9,7 +10,10 @@ const owner = (req: AuthedRequest): Owner => ({ tenantId: req.mailbox.tenantId, 
 @Controller('contacts')
 @UseGuards(AuthGuard)
 export class ContactsController {
-  constructor(private readonly contacts: ContactsService) {}
+  constructor(
+    private readonly contacts: ContactsService,
+    private readonly recipients: RecipientsService,
+  ) {}
 
   @Get()
   list(@Req() req: AuthedRequest, @Query('q') q?: unknown, @Query('page') page?: unknown) {
@@ -29,6 +33,13 @@ export class ContactsController {
     res.setHeader('Content-Disposition', 'attachment; filename="contacts.vcf"');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.send(vcf);
+  }
+
+  /** Forgets the addresses written to (Settings > Clear history). */
+  @Delete('recent')
+  @HttpCode(204)
+  async clearRecent(@Req() req: AuthedRequest) {
+    await this.recipients.clear(owner(req));
   }
 
   @Post('import')

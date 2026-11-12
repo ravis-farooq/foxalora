@@ -9,6 +9,7 @@ import { VaultService } from './auth/vault.service';
 import { DB, requireEnv, VALKEY } from './common/tokens';
 import { ContactsController } from './contacts/contacts.controller';
 import { ContactsService } from './contacts/contacts.service';
+import { RecipientsService } from './contacts/recipients.service';
 import { createDb } from './database/database';
 import type { Database } from './database/schema';
 import { TenantDb } from './database/tenant-db';
@@ -56,6 +57,7 @@ class Shutdown implements OnApplicationShutdown {
     AuthGuard,
     MailService,
     ContactsService,
+    RecipientsService,
     PreferencesService,
     Shutdown,
   ],

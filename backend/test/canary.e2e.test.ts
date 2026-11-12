@@ -27,7 +27,7 @@ class LeakyFakeMail {
     throw Object.assign(new Error(`Command failed: A3 LOGIN alice ${CANARY}`), { executedCommand: `A3 LOGIN alice ${CANARY}`, responseText: CANARY });
   }
   async send() {
-    return undefined;
+    return { to: [], cc: [], bcc: [] };
   }
 }
 

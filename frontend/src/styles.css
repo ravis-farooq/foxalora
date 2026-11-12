@@ -44,6 +44,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .muted { color: var(--muted); } .small { font-size: 12.5px; }
 .grow { flex: 1; }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.skip-link { position: fixed; left: 8px; top: -60px; z-index: 200; padding: 10px 14px; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 600; text-decoration: none; }
+.skip-link:focus { top: 8px; }
+main:focus { outline: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .center { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
 .error { color: var(--danger); font-size: 13px; padding: 6px 0; }
@@ -321,6 +324,36 @@ button.ghost.danger-text { border-color: color-mix(in srgb, var(--danger) 40%, t
 .small-empty { padding: 24px; }
 .signature-editor { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; color: #202124; color-scheme: light; }
 .signature-editor .fx-body { min-height: 120px; }
+
+/* ---------- Confirmation, tooltips, guide ---------- */
+.confirm-layer { z-index: 60; }
+.confirm { width: min(420px, 100%); text-align: left; }
+.confirm h2 { margin: 12px 0 6px; font-size: 18px; }
+.confirm p { margin: 0 0 20px; }
+.confirm-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-text); }
+.confirm-icon.danger { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+button.primary.danger { background: #b42318; }
+button.primary.danger:hover:not(:disabled) { background: #8f1d14; }
+.toast-action { flex-shrink: 0; border: 0; border-radius: 6px; padding: 6px 10px; background: rgb(255 255 255 / .14); color: #fff; font-weight: 600; }
+.toast-action:hover { background: rgb(255 255 255 / .24); }
+.draft-status { margin-left: auto; margin-right: 8px; font-size: 12px; color: var(--muted); }
+.draft-status.failed { color: var(--danger); font-weight: 600; }
+.suggestions .badge-soft { margin-left: auto; flex-shrink: 0; }
+.tooltip { position: fixed; z-index: 120; max-width: 260px; padding: 6px 10px; border-radius: 6px; background: #1f2630; color: #fff; font-size: 12.5px; line-height: 1.4; box-shadow: var(--shadow); }
+.guide-layer { position: fixed; inset: 0; z-index: 70; }
+.guide-dim { position: absolute; inset: 0; background: rgb(10 12 16 / .55); }
+.guide-spot { position: absolute; border-radius: 12px; box-shadow: 0 0 0 9999px rgb(10 12 16 / .55), 0 0 0 3px var(--accent); transition: all .25s ease; pointer-events: none; }
+.guide-card { position: absolute; width: min(360px, calc(100vw - 24px)); padding: 22px; background: var(--surface); color: var(--text); border-radius: 16px; box-shadow: var(--shadow); }
+.guide-card h2 { margin: 2px 0 8px; font-size: 18px; }
+.guide-card p { margin: 0; line-height: 1.5; }
+.guide-count { color: var(--muted); font-size: 12px; font-weight: 600; margin-bottom: 4px !important; }
+.guide-dots { display: flex; gap: 6px; margin: 16px 0; }
+.guide-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+.guide-dots span.on { background: var(--accent); width: 18px; border-radius: 4px; }
+.guide-actions { display: flex; align-items: center; gap: 8px; }
+.guide-actions .ghost { display: inline-flex; align-items: center; gap: 2px; }
+.guide-actions .ghost svg { width: 16px; height: 16px; }
+@media (prefers-reduced-motion: reduce) { .guide-spot { transition: none; } }
 
 /* ---------- Narrower screens ---------- */
 @media (max-width: 1180px) {

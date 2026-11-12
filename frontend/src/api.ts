@@ -8,7 +8,7 @@ export interface MessageSummary {
 }
 export interface MessageList { uidValidity: string; total: number; items: MessageSummary[] }
 export interface MessageFull {
-  id: string; subject: string; from: Addr[]; to: Addr[]; cc: Addr[]; date: string | null;
+  id: string; subject: string; from: Addr[]; to: Addr[]; cc: Addr[]; bcc?: Addr[]; date: string | null;
   text: string; html: string | null;
   attachments: { part: string; filename: string; size: number; contentType: string; inline: boolean }[];
 }
@@ -18,10 +18,17 @@ export const PAGE_SIZE = 25;
 export interface ContactEmail { email: string; label: '' | 'work' | 'home' | 'other' | string }
 export interface ContactDraft { displayName: string; company: string; phone: string; emails: ContactEmail[] }
 export interface Contact extends ContactDraft { id: string }
-export interface Suggestion { name: string; email: string }
-export interface Preferences { displayName: string; theme: 'system' | 'light' | 'dark'; density: 'comfortable' | 'compact'; timeZone: string }
+export interface Suggestion { name: string; email: string; source: 'contact' | 'recent' }
+export interface Preferences {
+  displayName: string; theme: 'system' | 'light' | 'dark'; density: 'comfortable' | 'compact'; timeZone: string;
+  rememberRecipients: boolean; onboarded: boolean;
+}
 export interface SignatureRecord { id: string; name: string; content: JSONContent; isDefault: boolean }
 export type SignatureDraft = Omit<SignatureRecord, 'id'>;
+export interface OutgoingMessage {
+  to: string[]; cc?: string[]; bcc?: string[]; subject: string; text: string; html?: string;
+  inlineImages?: { contentId: string; filename: string; contentType: string; data: string }[];
+}
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -58,11 +65,13 @@ export const api = {
   // Message ids are opaque (folder + UIDVALIDITY + UID); a 409 folder_reset means reload the list.
   get: (id: string) => call<MessageFull>('GET', `/messages/${encodeURIComponent(id)}`),
   flag: (id: string, f: { seen?: boolean; flagged?: boolean }) => call<void>('PATCH', `/messages/${encodeURIComponent(id)}`, f),
-  remove: (id: string) => call<void>('DELETE', `/messages/${encodeURIComponent(id)}`),
-  send: (m: {
-    to: string[]; cc?: string[]; bcc?: string[]; subject: string; text: string; html?: string;
-    inlineImages?: { contentId: string; filename: string; contentType: string; data: string }[];
-  }) => call<{ status: string }>('POST', '/messages/send', m),
+  /** Moves to Trash (trashId for Undo) or, in Trash, deletes for good (trashId null). */
+  remove: (id: string) => call<{ trashId: string | null }>('DELETE', `/messages/${encodeURIComponent(id)}`),
+  move: (id: string, folder: string) => call<{ id: string | null }>('POST', `/messages/${encodeURIComponent(id)}/move`, { folder }),
+  send: (m: OutgoingMessage & { draftId?: string }) => call<{ status: string }>('POST', '/messages/send', m),
+  saveDraft: (m: OutgoingMessage & { replaceId?: string }) => call<{ id: string }>('POST', '/drafts', m),
+  deleteDraft: (id: string) => call<void>('DELETE', `/drafts/${encodeURIComponent(id)}`),
+  clearRecent: () => call<void>('DELETE', '/contacts/recent'),
   contacts: (search: string, page: number) => call<{ items: Contact[]; total: number }>('GET', `/contacts${q({ page, ...(search ? { q: search } : {}) })}`),
   suggest: (text: string) => call<Suggestion[]>('GET', `/contacts/suggest${q({ q: text })}`),
   createContact: (c: ContactDraft) => call<Contact>('POST', '/contacts', c),

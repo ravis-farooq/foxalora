@@ -1,6 +1,7 @@
 # Contributing to Foxalora Mail
 
 Thank you for helping. Foxalora handles people's email, so security rules come before features.
+New to the project? Start with `docs/DEVELOPER_HANDOFF.md`.
 
 ## Licence and sign-off
 
@@ -21,8 +22,9 @@ Code ported from other projects must keep its original copyright notice and say 
 3. Run the same checks CI runs:
 
 ```bash
+dev/up.sh --services-only && . dev/env.sh     # integration tests need the dev PostgreSQL and Valkey
 cd backend && npm run lint && npm run typecheck && npm test && npm run build
-cd ../frontend && npm run lint && npm run typecheck && npm run build
+cd ../frontend && npm run lint && npm run typecheck && npx vitest run && npm run build
 ```
 
 4. Never commit secrets, real mailbox credentials, `mail-servers.json`, `.env` files or TLS keys. CI scans for secrets and fails the build.

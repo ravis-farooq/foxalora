@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type R
 import { api, type Contact, type ContactDraft } from '../api';
 import { avatarOf } from '../mail/format';
 import { Icon } from '../ui/icons';
+import { useConfirm } from '../ui/confirm-context';
 import { useToast } from '../ui/toast-context';
 import type { ComposeInit } from './Compose';
 
@@ -16,6 +17,7 @@ const EMPTY: ContactDraft = { displayName: '', company: '', phone: '', emails: [
 
 export default function Contacts({ onCompose }: { onCompose: (init: ComposeInit) => void }) {
   const toast = useToast();
+  const confirm = useConfirm();
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -72,7 +74,7 @@ export default function Contacts({ onCompose }: { onCompose: (init: ComposeInit)
   }
 
   async function remove(c: Contact) {
-    if (!window.confirm(`Delete ${nameOf(c)} from your contacts?`)) return;
+    if (!(await confirm({ title: `Delete ${nameOf(c)}?`, message: 'The contact is removed from your address book. Your emails are not affected.', confirmLabel: 'Delete contact', danger: true }))) return;
     try {
       await api.deleteContact(c.id);
       toast('success', 'Contact deleted.');
@@ -91,7 +93,7 @@ export default function Contacts({ onCompose }: { onCompose: (init: ComposeInit)
   const detailOpen = !!(selected || editing);
 
   return (
-    <div className={`contacts-view ${detailOpen ? 'has-detail' : ''}`}>
+    <main id="main" tabIndex={-1} className={`contacts-view ${detailOpen ? 'has-detail' : ''}`}>
       <section className="list" aria-label="Contacts">
         <div className="pane-head">
           <form role="search" className="search" onSubmit={runSearch}>
@@ -99,7 +101,7 @@ export default function Contacts({ onCompose }: { onCompose: (init: ComposeInit)
             <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search contacts" aria-label="Search contacts" maxLength={100} />
             {(search || query) && <button type="button" className="icon-btn" aria-label="Clear search" onClick={clearSearch}>{Icon.x}</button>}
           </form>
-          <button type="button" className="icon-btn" aria-label="New contact" title="New contact" onClick={() => { setSelected(null); setEditing({ ...EMPTY, emails: [{ email: '', label: '' }] }); }}>
+          <button type="button" className="icon-btn" aria-label="New contact" data-tip="New contact" onClick={() => { setSelected(null); setEditing({ ...EMPTY, emails: [{ email: '', label: '' }] }); }}>
             {Icon.plus}
           </button>
         </div>
@@ -107,8 +109,8 @@ export default function Contacts({ onCompose }: { onCompose: (init: ComposeInit)
           <h1>Contacts</h1>
           <span className="muted small">{query ? `${data.total} found for “${query}”` : `${data.total} contact${data.total === 1 ? '' : 's'}`}</span>
           <span className="grow" />
-          <button type="button" className="icon-btn" aria-label="Import contacts" title="Import contacts (vCard)" onClick={() => setImporting(true)}>{Icon.upload}</button>
-          <a className={`icon-btn ${data.total ? '' : 'disabled'}`} href={data.total ? api.exportContactsUrl() : undefined} aria-disabled={!data.total} download aria-label="Export all contacts" title="Export all contacts (vCard)">{Icon.download}</a>
+          <button type="button" className="icon-btn" aria-label="Import contacts" data-tip="Import contacts (vCard)" onClick={() => setImporting(true)}>{Icon.upload}</button>
+          <a className={`icon-btn ${data.total ? '' : 'disabled'}`} href={data.total ? api.exportContactsUrl() : undefined} aria-disabled={!data.total} download aria-label="Export all contacts" data-tip="Export all contacts (vCard)">{Icon.download}</a>
         </div>
         <div className="list-body" aria-busy={loading}>
           {error && <div className="notice error" role="alert">{Icon.alert}<span>{error}</span></div>}
@@ -166,7 +168,7 @@ export default function Contacts({ onCompose }: { onCompose: (init: ComposeInit)
               <ToolButton icon={Icon.pen} label="Edit" onClick={() => setEditing(selected)} />
               <ToolButton icon={Icon.trash} label="Delete" onClick={() => remove(selected)} />
               <span className="tool-sep" />
-              <a className="tool-btn" href={api.exportContactsUrl([selected.id])} download title="Export as vCard">
+              <a className="tool-btn" href={api.exportContactsUrl([selected.id])} download data-tip="Export as vCard">
                 {Icon.download}<span className="tool-label">Export</span>
               </a>
             </div>
@@ -196,13 +198,13 @@ export default function Contacts({ onCompose }: { onCompose: (init: ComposeInit)
           }}
         />
       )}
-    </div>
+    </main>
   );
 }
 
 function ToolButton({ icon, label, disabled, onClick }: { icon: ReactNode; label: string; disabled?: boolean; onClick: () => void }) {
   return (
-    <button type="button" className="tool-btn" disabled={disabled} onClick={onClick} title={label}>
+    <button type="button" className="tool-btn" disabled={disabled} onClick={onClick} data-tip={label}>
       {icon}
       <span className="tool-label">{label}</span>
     </button>

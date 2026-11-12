@@ -143,3 +143,23 @@ Short records of project decisions, including deviations from the PRD or SAD (CL
 **Operational impact**
 - Run `node dist/cli.js migrate` when updating (adds migration 0002).
 - The vCard import route accepts request bodies up to 3 MB; all other routes keep the 1 MB limit (sending keeps 15 MB).
+
+## D-007 Never lose work, never surprise: drafts, confirmations, undo, guide, address history
+
+- **Date:** 2026-11-12
+- **Decided by:** product owner (request for history suggestions, confirmation dialogs, save-on-close, guides, tooltips and accessibility); details by development
+- **Decision:**
+  - **Closing the composer saves a draft** to the server's Drafts folder (IMAP APPEND), also every 30 seconds while writing (FOX-055). A saved draft replaces the previous version: the new one is stored first, then the old one removed. Opening a draft offers "Continue writing"; sending removes it. Only **Discard** throws a message away, after a confirmation.
+  - **Confirmation dialogs** (one accessible `alertdialog`, focus starts on the safe button) for actions that cannot be undone: delete for good from Trash, discard a message, delete a contact or signature, reset settings, clear address history.
+  - **Undo instead of a dialog** for moving a message to Trash: the toast offers Undo (moves it back). A dialog for every delete slows everyone down; undo is safer and quicker.
+  - **Address history** (`recent_recipients`, migration 0003): after a successful send, the recipient addresses (address only, use count, last use) are kept for suggestions, at most 500 per mailbox. On by default; Settings can turn it off and clear it.
+  - **First-run guide** (7 short steps with a highlight), shown once (`onboarded` preference) and available from Help and Settings. **Tooltips** on hover and keyboard focus for every button, in plain words.
+  - **Accessibility:** no sound is used anywhere, so nothing depends on hearing; every status is on-screen text and announced to screen readers; error messages stay until dismissed and other messages pause while pointed at; skip link and `main` landmarks.
+
+**Security impact**
+- Drafts go through the same validation as sending (header-injection guard, HTML sanitizer, inline-image checks) and are built with file and URL access turned off. Only messages in the Drafts folder can be replaced or deleted through the draft routes.
+- **Conflict to note:** CLAUDE.md rule 10 says no local copy of mail in the database. Address history stores recipient addresses only, never content, under row-level security, with opt-out and clearing. If the product owner reads rule 10 as covering addresses too, turn the default off (one line in `preferences.ts`).
+
+**Operational impact**
+- Run migrations (0003). The Drafts folder must exist with the SPECIAL-USE \Drafts flag (Dovecot and Exim test servers have it); without it, saving a draft reports that there is no Drafts folder.
+- Drafts lose inline images when reopened (the viewer cannot show cid: images yet) and do not keep original attachments.

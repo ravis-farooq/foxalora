@@ -4,6 +4,7 @@ import { CONTROL_CHARS } from '../common/email';
 import type { Database } from '../database/schema';
 import { TenantDb, type TenantContext } from '../database/tenant-db';
 import { likePattern, parseContactInput, type ContactInput } from './contact-input';
+import { RecipientsService } from './recipients.service';
 import { parseVCards, toVCard } from './vcard';
 
 /** The signed-in mailbox; both values come from the session. */
@@ -31,7 +32,10 @@ function searchTerm(q: unknown): string {
  */
 @Injectable()
 export class ContactsService {
-  constructor(private readonly tdb: TenantDb) {}
+  constructor(
+    private readonly tdb: TenantDb,
+    private readonly recipients: RecipientsService,
+  ) {}
 
   async list(o: Owner, q?: unknown, page?: unknown): Promise<{ items: ContactView[]; total: number }> {
     const term = searchTerm(q);
@@ -101,8 +105,11 @@ export class ContactsService {
     if (!r) throw new NotFoundException();
   }
 
-  /** Recipient suggestions for the composer (FOX-073): name or address contains the text. */
-  async suggest(o: Owner, q: unknown): Promise<{ name: string; email: string }[]> {
+  /**
+   * Recipient suggestions for the composer (FOX-073): contacts whose name or address
+   * contains the text first, then addresses the mailbox has written to.
+   */
+  async suggest(o: Owner, q: unknown): Promise<{ name: string; email: string; source: 'contact' | 'recent' }[]> {
     const term = searchTerm(q);
     if (!term) return [];
     const pat = likePattern(term);
@@ -120,7 +127,15 @@ export class ContactsService {
         .limit(SUGGESTIONS)
         .execute(),
     );
-    return rows.map((r) => ({ name: r.name, email: r.email }));
+    const out: { name: string; email: string; source: 'contact' | 'recent' }[] = rows.map((r) => ({ name: r.name, email: r.email, source: 'contact' }));
+    if (out.length < SUGGESTIONS) {
+      const known = new Set(out.map((r) => r.email.toLowerCase()));
+      for (const email of await this.recipients.suggest(o, term, SUGGESTIONS)) {
+        if (out.length >= SUGGESTIONS) break;
+        if (!known.has(email)) out.push({ name: '', email, source: 'recent' });
+      }
+    }
+    return out;
   }
 
   /** vCard import (FOX-075): valid cards are added, invalid ones listed; duplicates skipped by address unless asked. */
