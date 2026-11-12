@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import { api, ApiError, Folder, MessageFull, MessageSummary, PAGE_SIZE } from '../api';
-import { folderIcon, folderLabel, sortFolders } from '../mail/folders';
+import { folderIcon, folderLabel, restoreTarget, sortFolders } from '../mail/folders';
 import { avatarOf, displayName, formatAddr, forwardSubject, fullDate, replyAllRecipients, replySubject, shortDate } from '../mail/format';
 import { Icon, Logo } from '../ui/icons';
 import { Menu } from '../ui/Menu';
@@ -35,11 +35,14 @@ export default function Mailbox({ email, onCompose, version }: { email: string; 
   const openSeq = useRef(0);
   // Where the list is, for refreshes started elsewhere (a draft saved, a message sent).
   const view = useRef({ folder: 'INBOX', page: 1, query: '' });
+  // Where messages deleted in this session came from (Trash id -> folder), for Restore.
+  const origins = useRef(new Map<string, string>());
 
   const current = folders.find((f) => f.path === folder);
   const label = current ? folderLabel(current) : folder === 'INBOX' ? 'Inbox' : folder;
   const summary = list.items.find((m) => m.id === selected);
   const inDrafts = current?.specialUse === '\\Drafts';
+  const inTrash = current?.specialUse === '\\Trash';
 
   const loadFolders = useCallback(() => {
     api.folders().then(setFolders, (e: Error) => toast('error', e.message));
@@ -204,38 +207,64 @@ export default function Mailbox({ email, onCompose, version }: { email: string; 
     if (!selected) return;
     const id = selected;
     const from = folder;
-    const inTrash = current?.specialUse === '\\Trash';
-    if (inTrash) {
-      const ok = await confirm({
-        title: 'Delete this message for good?',
-        message: 'It is already in Trash, so it cannot be restored afterwards.',
-        confirmLabel: 'Delete for good',
-        danger: true,
-      });
-      if (!ok) return;
-    }
+    const ok = inTrash
+      ? await confirm({
+          title: 'Delete this message for good?',
+          message: 'It is already in Trash, so it cannot be restored afterwards.',
+          confirmLabel: 'Delete for good',
+          danger: true,
+        })
+      : await confirm({
+          title: 'Move this message to Trash?',
+          message: 'You can restore it from Trash later.',
+          confirmLabel: 'Move to Trash',
+        });
+    if (!ok) return;
     try {
       const { trashId } = await api.remove(id);
       setList((l) => ({ items: l.items.filter((x) => x.id !== id), total: Math.max(0, l.total - 1) }));
       closeMessage();
       loadFolders();
-      if (inTrash) toast('success', 'Message deleted for good.');
-      else {
-        // Moving to Trash is easy to undo, so it needs no confirmation.
-        toast('success', 'Message moved to Trash.', trashId ? {
-          label: 'Undo',
-          run: () => {
-            api.move(trashId, from).then(
-              () => {
-                toast('success', 'Message restored.');
-                loadFolders();
-                loadList(view.current.folder, view.current.page, view.current.query);
-              },
-              (e: Error) => toast('error', e.message),
-            );
-          },
-        } : undefined);
+      if (inTrash) {
+        toast('success', 'Message deleted for good.');
+        return;
       }
+      if (trashId) origins.current.set(trashId, from);
+      toast('success', 'Message moved to Trash.', trashId ? {
+        label: 'Undo',
+        run: () => {
+          api.move(trashId, from).then(
+            () => {
+              origins.current.delete(trashId);
+              toast('success', 'Message restored.');
+              loadFolders();
+              loadList(view.current.folder, view.current.page, view.current.query);
+            },
+            (e: Error) => toast('error', e.message),
+          );
+        },
+      } : undefined);
+    } catch (e) {
+      toast('error', (e as Error).message);
+    }
+  }
+
+  /** Trash: move the open message back where it came from (or to the Inbox). */
+  async function restore() {
+    if (!selected) return;
+    const id = selected;
+    const target = restoreTarget(folders, origins.current.get(id));
+    if (!target) {
+      toast('error', 'There is no Inbox to restore the message to.');
+      return;
+    }
+    try {
+      await api.move(id, target.path);
+      origins.current.delete(id);
+      setList((l) => ({ items: l.items.filter((x) => x.id !== id), total: Math.max(0, l.total - 1) }));
+      closeMessage();
+      loadFolders();
+      toast('success', `Message restored to ${folderLabel(target)}.`, { label: `Open ${folderLabel(target)}`, run: () => openFolder(target.path) });
     } catch (e) {
       toast('error', (e as Error).message);
     }
@@ -393,6 +422,18 @@ export default function Mailbox({ email, onCompose, version }: { email: string; 
       <section className="reader" aria-label="Message">
         <div className="pane-head toolbar" role="toolbar" aria-label="Message actions" data-guide="toolbar">
           <button type="button" className="icon-btn only-mobile" aria-label="Back to list" onClick={closeMessage}>{Icon.back}</button>
+          {inTrash && (
+            <>
+              <ToolButton
+                icon={Icon.restore}
+                label="Restore"
+                tip="Move this message back to the folder it was deleted from, or to Inbox"
+                disabled={!selected}
+                onClick={restore}
+              />
+              <span className="tool-sep" />
+            </>
+          )}
           {inDrafts ? (
             <ToolButton icon={Icon.pen} label="Continue writing" tip="Open this draft to finish and send it" disabled={!msg} onClick={continueDraft} />
           ) : (
@@ -403,7 +444,7 @@ export default function Mailbox({ email, onCompose, version }: { email: string; 
             </>
           )}
           <span className="tool-sep" />
-          <ToolButton icon={Icon.trash} label="Delete" tip={current?.specialUse === '\\Trash' ? 'Delete for good' : 'Move to Trash (you can undo this)'} disabled={!selected} onClick={remove} />
+          <ToolButton icon={Icon.trash} label={inTrash ? 'Delete for good' : 'Delete'} tip={inTrash ? 'Delete for good. This cannot be undone.' : 'Move to Trash. You can restore it later.'} disabled={!selected} onClick={remove} />
           <Menu
             label="Mark"
             icon={Icon.tag}

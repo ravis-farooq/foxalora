@@ -36,6 +36,8 @@ services:
     volumes:
       - ./dev/mailservers/certs:/tmp/certs:ro
       - ./dev/mailservers/postfix-accounts.cf:/tmp/docker-mailserver/postfix-accounts.cf:ro
+      # Development only: outside addresses bounce instead of reaching the internet.
+      - ./dev/mailservers/postfix-main.cf:/tmp/docker-mailserver/postfix-main.cf:ro
       - maildata-dev:/var/mail
     ports:
       - "143:143"

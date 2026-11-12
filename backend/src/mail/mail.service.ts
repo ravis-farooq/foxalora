@@ -28,6 +28,23 @@ interface PartInfo {
   charset: string | undefined;
 }
 
+// Names for parts that arrive without one (bounces and receipts are made of these).
+const NAMED_TYPES: Record<string, string> = {
+  'message/delivery-status': 'delivery-report.txt',
+  'message/global-delivery-status': 'delivery-report.txt',
+  'message/disposition-notification': 'read-receipt.txt',
+  'message/rfc822': 'attached-message.eml',
+  'message/global': 'attached-message.eml',
+  'text/rfc822-headers': 'original-headers.txt',
+  'text/calendar': 'invitation.ics',
+};
+const EXTENSIONS: Record<string, string> = {
+  'text/plain': 'txt', 'text/html': 'html', 'text/csv': 'csv', 'application/pdf': 'pdf', 'application/zip': 'zip',
+  'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp',
+};
+const fallbackName = (type: string, part: string) =>
+  NAMED_TYPES[type] ?? `attachment-${part}${EXTENSIONS[type] ? `.${EXTENSIONS[type]}` : ''}`;
+
 /** Splits a body structure into the displayable text/html parts and everything else. */
 export function classifyParts(root: MessageStructureObject | undefined) {
   let text: PartInfo | undefined;
@@ -44,7 +61,7 @@ export function classifyParts(root: MessageStructureObject | undefined) {
     const info: PartInfo = {
       part: node.part ?? '1',
       contentType: type,
-      filename: safeFilename(filename, `attachment-${node.part ?? '1'}`),
+      filename: safeFilename(filename, fallbackName(type, node.part ?? '1')),
       size: node.encoding === 'base64' && node.size ? Math.floor((node.size * 3) / 4) : node.size ?? 0,
       inline: node.disposition === 'inline',
       contentId: node.id ? node.id.replace(/^<|>$/g, '') : null,

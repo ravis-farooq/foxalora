@@ -25,3 +25,13 @@ export const folderIcon = (f: FolderLike): IconName => role(f)?.icon ?? 'folder'
 export function sortFolders<T extends FolderLike>(folders: T[]): T[] {
   return [...folders].sort((a, b) => (role(a)?.order ?? 100) - (role(b)?.order ?? 100) || folderLabel(a).localeCompare(folderLabel(b)));
 }
+
+/**
+ * Where "Restore" puts a message from Trash: the folder it was deleted from (known for
+ * messages deleted in this session) if that folder still exists, otherwise the Inbox.
+ * IMAP does not record where a message came from, so older Trash items go to the Inbox.
+ */
+export function restoreTarget<T extends Pick<Folder, 'path' | 'specialUse'>>(folders: T[], origin?: string): T | undefined {
+  const fromOrigin = origin ? folders.find((f) => f.path === origin && f.specialUse !== '\\Trash') : undefined;
+  return fromOrigin ?? folders.find((f) => f.specialUse === '\\Inbox') ?? folders.find((f) => f.path.toUpperCase() === 'INBOX');
+}

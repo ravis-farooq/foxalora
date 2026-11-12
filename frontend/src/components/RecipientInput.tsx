@@ -32,9 +32,12 @@ export default function RecipientInput({ label, value, onChange, autoFocus }: { 
       api.suggest(token).then(
         (r) => {
           if (n !== seq.current) return;
-          setItems(r);
+          // An address already typed in full needs no suggestion; an open list would cover the
+          // fields below it and catch a click meant for them.
+          const rest = r.filter((x) => x.email.toLowerCase() !== token.toLowerCase());
+          setItems(rest);
           setActive(0);
-          setOpen(r.length > 0);
+          setOpen(rest.length > 0);
         },
         () => undefined, // suggestions are optional; typing still works
       );

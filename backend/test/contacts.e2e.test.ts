@@ -185,6 +185,18 @@ describe.skipIf(!hasPg || !VALKEY)('contacts, preferences and signatures over HT
     expect((await alice('DELETE', `/signatures/${b.json.id}`)).status).toBe(204);
   });
 
+  it('stores signature images inside the signature and keeps them per mailbox', async () => {
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const content = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'image', attrs: { src: png, alt: 'Logo', width: 80 } }, { type: 'text', text: ' Alice' }] }] };
+    const r = await alice('POST', '/signatures', { name: 'With logo', content });
+    expect(r.status).toBe(201);
+    const saved = (await alice('GET', '/signatures')).json.find((x: any) => x.name === 'With logo');
+    expect(saved.content.content[0].content[0]).toEqual({ type: 'image', attrs: { src: png, alt: 'Logo', width: 80 } });
+    expect(JSON.stringify((await adam('GET', '/signatures')).json)).not.toContain('With logo');
+    const svg = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'image', attrs: { src: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=' } }, { type: 'text', text: 'x' }] }] };
+    expect(JSON.stringify((await alice('POST', '/signatures', { name: 'Svg', content: svg })).json.content)).not.toContain('svg');
+  });
+
   it('remembers addresses written to, per mailbox, and honours opt-out and clearing (FOX-073)', async () => {
     const send = (who: typeof alice, to: string[], cc: string[] = []) => who('POST', '/messages/send', { to, cc, subject: 'x', text: 'x' });
     expect((await send(alice, ['Zed.Recent@x.test'], ['alice@a.example', 'zoe@x.test'])).status).toBe(202);

@@ -42,6 +42,8 @@ Useful variants:
 
 These exist **only in the local test servers** on your own machine. They are fake, safe to share, and do not work anywhere else. Never use a real mailbox for development.
 
+The test servers **never deliver to the internet**: mail to any address outside the test domains comes straight back with "mail to outside addresses is not delivered". Send test mail between the accounts below. To try delivery to real mailboxes, see D-009 in `docs/DECISIONS.md`.
+
 | Server | Address | Password | Notes |
 |---|---|---|---|
 | Postfix + Dovecot (default) | `carol@dovecot.test` | `carol-pass-1` | Has sample messages: formatting, attachments, a hostile newsletter, Arabic text |
@@ -108,7 +110,9 @@ Full reasons, security and operational impact are in `docs/DECISIONS.md`.
 | D-004 | Data layer: PostgreSQL 18 with row-level security (Kysely), Valkey for sessions and throttling, least-privilege database role. |
 | D-005 | Styling: plain CSS with design tokens and our own SVG icons; no CSS framework. |
 | D-006 | Contacts, settings and signatures built before the rest of Phase 2, at the product owner's request. |
-| D-007 | Never lose work, never surprise: drafts saved on close, confirmation for actions that cannot be undone, Undo for moving to Trash, recipient history (address only, can be switched off), first-run guide, tooltips, no sound-only feedback. |
+| D-007 | Never lose work, never surprise: drafts saved on close, confirmation before deleting, Undo and Restore from Trash, recipient history (address only, can be switched off), first-run guide, tooltips, no sound-only feedback. |
+| D-008 | Signatures can hold up to 3 images (PNG, JPEG, GIF, 64 KB each), stored in the signature and sent as inline attachments, like Roundcube. |
+| D-009 | The local test mail servers deliver only to their own test domains; mail to outside addresses bounces at once. |
 
 **Open decisions; do not decide these alone:**
 
@@ -131,7 +135,7 @@ Full reasons, security and operational impact are in `docs/DECISIONS.md`.
 | 5. SSO, Docker image, installer, monitoring | Not started |
 | 6. Security verification and release | Not started |
 
-Working today: sign-in, folders with roles and counts, paged list, search (subject, sender, recipient), reading with safe HTML, reply / reply all / forward, delete with Undo, mark read/unread/star, drafts (save on close, autosave, continue, discard), contacts with suggestions and vCard, settings (name, theme, density, time zone, address history), signatures, first-run guide, tooltips, phone layout, light and dark themes.
+Working today: sign-in, folders with roles and counts, paged list, search (subject, sender, recipient), reading with safe HTML, reply / reply all / forward, delete with confirmation and Undo, restore from Trash, mark read/unread/star, drafts (save on close, autosave, continue, discard), contacts with suggestions and vCard, settings (name, theme, density, time zone, address history), signatures with images, first-run guide, tooltips, phone layout, light and dark themes.
 
 **Good next stories** (ids are in `docs/Foxalora-Development-Backlog.xlsx`, also importable to Jira from `docs/Foxalora-Jira-Import.csv`):
 
@@ -153,7 +157,7 @@ Our users include people who have never used webmail. Every screen should pass t
 
 - **Plain words.** "Move to Trash", not "Expunge". No jargon in labels, messages or errors. Say what happened and what to do next.
 - **Every icon explains itself.** Icon buttons carry an `aria-label` and a `data-tip` description; the shared tooltip shows it on hover and on keyboard focus. Main buttons also show a text label.
-- **Never lose the user's work.** Closing the composer saves a draft. Anything that cannot be undone asks first with the shared dialog (`useConfirm`). Anything that can be undone does not ask; it offers Undo in the toast instead.
+- **Never lose the user's work.** Closing the composer saves a draft. Deleting asks first with the shared dialog (`useConfirm`): moving to Trash says it can be restored, and the toast also offers Undo; deleting for good is marked as permanent. Trash has a Restore button.
 - **Always confirm what happened** with a short toast ("Message sent", "Saved to Drafts").
 - **Show only what works.** No buttons for features that do not exist yet.
 - **Guide newcomers.** The first-run guide (`frontend/src/components/Guide.tsx`) must stay short; update it when the main screen changes.

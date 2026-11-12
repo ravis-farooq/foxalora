@@ -25,12 +25,12 @@ export class ImageStore {
     return img;
   }
 
-  addDataUrl(dataUrl: string): InlineImage | null {
+  addDataUrl(dataUrl: string, name = 'pasted-image'): InlineImage | null {
     const m = /^data:(image\/[a-z]+);base64,(.*)$/is.exec(dataUrl);
     if (!m) return null;
     try {
       const bytes = Uint8Array.from(atob(m[2].replace(/\s+/g, '')), (c) => c.charCodeAt(0));
-      return this.add(new Blob([bytes], { type: m[1].toLowerCase() }), 'pasted-image');
+      return this.add(new Blob([bytes], { type: m[1].toLowerCase() }), name);
     } catch {
       return null;
     }

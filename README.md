@@ -39,7 +39,8 @@ a hostile newsletter (tracking pixel, CSS background, deceptive link), plain tex
 GreenMail stays in `docker-compose.yml` (profile `greenmail`) for fast automated tests; it
 does not use TLS and behaves differently from production servers (`docs/PROTOTYPE_RESULTS.md`).
 The API trusts the test CA through `NODE_EXTRA_CA_CERTS`; certificate verification stays on.
-Ports 143, 993, 587 and 465 must be free on the machine.
+The test servers never deliver to the internet: mail to outside addresses bounces at once
+(`dev/mailservers/postfix-main.cf`). Ports 143, 993, 587 and 465 must be free on the machine.
 
 New developers: start with `docs/DEVELOPER_HANDOFF.md` (setup, test accounts, rules, how to contribute).
 
@@ -70,9 +71,9 @@ Progress and test status: `docs/PROTOTYPE_RESULTS.md` (Phase 0), `docs/PHASE1_PR
 | Light and dark themes, phone layout with drawer and back button | `frontend/src/styles.css`, `frontend/src/ui/theme.ts` |
 | CONT contacts: create, edit, delete, search, several addresses; vCard import and export; suggestions while typing recipients | `backend/src/contacts/`, `frontend/src/components/Contacts.tsx`, `RecipientInput.tsx` |
 | PREF display name (used in From), theme, density, time zone; reset | `backend/src/preferences/`, `frontend/src/components/Settings.tsx` |
-| Signatures: rich text, default per mailbox, cleaned on save | `backend/src/preferences/signature-content.ts`, `frontend/src/components/SignatureEditor.tsx` |
+| Signatures: rich text and up to 3 images (sent as inline attachments), default per mailbox, cleaned on save | `backend/src/preferences/signature-content.ts`, `frontend/src/components/SignatureEditor.tsx` |
 | COMP drafts: saved on close and every 30 s, continue, discard with confirmation, removed after send | `backend/src/mail/outgoing.ts`, `mail.service.ts#saveDraft`, `frontend/src/components/Compose.tsx` |
-| Delete with Undo; confirmation dialogs for actions that cannot be undone | `frontend/src/ui/ConfirmProvider.tsx`, `Mailbox.tsx` |
+| Delete with confirmation and Undo; Restore from Trash (to the original folder or Inbox); confirmation dialogs | `frontend/src/ui/ConfirmProvider.tsx`, `Mailbox.tsx`, `mail/folders.ts#restoreTarget` |
 | Recipient suggestions from contacts and address history (opt-out, clear) | `backend/src/contacts/recipients.service.ts`, `RecipientInput.tsx` |
 | First-run guide, tooltips on hover and focus, skip link, visual-only feedback | `frontend/src/components/Guide.tsx`, `frontend/src/ui/TooltipLayer.tsx` |
 

@@ -32,6 +32,12 @@ step "Test certificates"
 running() { [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = "true" ]; }
 exists() { docker inspect "$1" >/dev/null 2>&1; }
 
+# Containers created before outside delivery was turned off are recreated (mail is kept in the volume).
+if exists foxalora-mailserver && ! docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}' foxalora-mailserver | grep -q postfix-main.cf; then
+  echo "Updating the mail server so it never delivers to the internet."
+  docker rm -f foxalora-mailserver >/dev/null
+fi
+
 if running foxalora-exim; then
   echo "Stopping the Exim test server (it uses the same mail ports)."
   docker rm -f foxalora-exim >/dev/null
@@ -68,6 +74,7 @@ else
     -e LOG_LEVEL=warn \
     -v "$ROOT/dev/mailservers/certs:/tmp/certs:ro" \
     -v "$ROOT/dev/mailservers/postfix-accounts.cf:/tmp/docker-mailserver/postfix-accounts.cf:ro" \
+    -v "$ROOT/dev/mailservers/postfix-main.cf:/tmp/docker-mailserver/postfix-main.cf:ro" \
     -v foxalora-maildata-dev:/var/mail \
     -p 143:143 -p 993:993 -p 587:587 -p 465:465 mailserver/docker-mailserver:16.0.1
   start foxalora-postgres -p "127.0.0.1:${FOXALORA_PG_PORT:-55432}:5432" \

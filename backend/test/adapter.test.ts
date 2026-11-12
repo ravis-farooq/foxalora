@@ -40,10 +40,27 @@ describe('body structure classification (fetch policy, D1)', () => {
       ['2', 'logo.png', true],
       ['3', 'afdp.exe', false],
       ['4', 'notes.txt', false],
-      ['5', 'attachment-5', false],
+      ['5', 'attached-message.eml', false],
     ]);
     expect(r.attachments[0].contentId).toBe('logo@x');
     expect(r.attachments[0].size).toBe(300); // base64 size converted to decoded size
+  });
+
+  it('names unnamed parts by type, so a bounce shows a delivery report and the original message', () => {
+    const bounce = {
+      type: 'multipart/report',
+      childNodes: [
+        { part: '1', type: 'text/plain', size: 400 },
+        { part: '2', type: 'message/delivery-status', size: 598 },
+        { part: '3', type: 'message/rfc822', size: 2048, childNodes: [{ part: '3.1', type: 'text/plain' }] },
+        { part: '4', type: 'text/rfc822-headers', size: 900 },
+        { part: '5', type: 'application/pdf', disposition: 'attachment', size: 10 },
+        { part: '6', type: 'application/x-unknown', disposition: 'attachment', size: 10 },
+      ],
+    };
+    expect(classifyParts(bounce as never).attachments.map((a) => a.filename)).toEqual([
+      'delivery-report.txt', 'attached-message.eml', 'original-headers.txt', 'attachment-5.pdf', 'attachment-6',
+    ]);
   });
 
   it('handles a single-part message (no part number)', () => {

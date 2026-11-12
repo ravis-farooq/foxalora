@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { folderIcon, folderLabel, sortFolders } from '../../src/mail/folders';
+import { folderIcon, folderLabel, restoreTarget, sortFolders } from '../../src/mail/folders';
 import { avatarOf, forwardSubject, replyAllRecipients, replySubject, setDisplayTimeZone, shortDate } from '../../src/mail/format';
 
 const f = (name: string, specialUse: string | null) => ({ name, specialUse });
@@ -16,6 +16,21 @@ describe('folders', () => {
   it('puts role folders first in a fixed order, then the rest alphabetically', () => {
     const sorted = sortFolders([f('Zeta', null), f('Trash', '\\Trash'), f('Alpha', null), f('Sent', '\\Sent'), f('INBOX', '\\Inbox'), f('Junk', '\\Junk'), f('Drafts', '\\Drafts')]);
     expect(sorted.map(folderLabel)).toEqual(['Inbox', 'Drafts', 'Sent', 'Junk', 'Trash', 'Alpha', 'Zeta']);
+  });
+});
+
+describe('restoreTarget (Restore from Trash)', () => {
+  const folders = [
+    { path: 'INBOX', specialUse: '\\Inbox' }, { path: 'Projects', specialUse: null },
+    { path: 'Archive', specialUse: '\\Archive' }, { path: 'Trash', specialUse: '\\Trash' },
+  ];
+  it('returns the folder the message was deleted from', () => {
+    expect(restoreTarget(folders, 'Projects')?.path).toBe('Projects');
+  });
+  it('falls back to the Inbox when the origin is unknown, gone, or Trash itself', () => {
+    expect(restoreTarget(folders)?.path).toBe('INBOX');
+    expect(restoreTarget(folders, 'Deleted folder')?.path).toBe('INBOX');
+    expect(restoreTarget(folders, 'Trash')?.path).toBe('INBOX');
   });
 });
 

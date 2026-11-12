@@ -6,6 +6,7 @@ import { Icon } from '../ui/icons';
 import { usePrefs } from '../ui/prefs-context';
 import { useConfirm } from '../ui/confirm-context';
 import { useToast } from '../ui/toast-context';
+import { countImages } from '../editor/signature-images';
 import SignatureEditor from './SignatureEditor';
 
 type Section = 'general' | 'appearance' | 'signatures';
@@ -271,7 +272,8 @@ function Signatures({ signatures, onChanged }: { signatures: SignatureRecord[]; 
               <div className="signature-text">
                 <strong>{s.name}</strong>
                 {s.isDefault && <span className="badge-soft">Default</span>}
-                <p className="muted small signature-preview">{previewText(s.content) || '(empty)'}</p>
+                <p className="muted small signature-preview">{previewText(s.content) || (countImages(s.content) ? '' : '(empty)')}</p>
+                {countImages(s.content) > 0 && <p className="muted small">{Icon.paperclip} {countImages(s.content)} image{countImages(s.content) === 1 ? '' : 's'}</p>}
               </div>
               <div className="row-actions">
                 {!s.isDefault && <button type="button" className="link" onClick={() => run(() => api.updateSignature(s.id, { name: s.name, content: s.content, isDefault: true }), `“${s.name}” is now the default.`)}>Make default</button>}
@@ -331,7 +333,7 @@ function SignatureForm({ initial, onCancel, onSaved }: { initial: Omit<Signature
       <div className="field">
         <span id="sig-label">Signature</span>
         <SignatureEditor initial={start} onChange={setContent} />
-        <small className="muted">Text, formatting and links. Images are not supported in signatures yet.</small>
+        <small className="muted">Text, formatting, links and up to 3 images such as your logo (PNG, JPEG or GIF, 64 KB each). Images are sent with each message, so they show without loading anything from the internet.</small>
       </div>
       <label className="checkbox">
         <input type="checkbox" checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />

@@ -1,0 +1,4 @@
+# Development only: never deliver to the real internet. Mail for the test domains
+# (dovecot.test) is delivered locally as usual; everything else is returned at once.
+default_transport = error:5.7.1 Foxalora development server - mail to outside addresses is not delivered. Use a test account such as dave@dovecot.test.
+relay_transport = error:5.7.1 Foxalora development server - mail to outside addresses is not delivered. Use a test account such as dave@dovecot.test.

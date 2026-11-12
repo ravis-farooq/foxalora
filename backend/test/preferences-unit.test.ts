@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PREFERENCES, parsePreferencesPatch, withDefaults } from '../src/preferences/preferences';
-import { cleanSignature, MAX_SIGNATURE_BYTES, parseSignatureInput } from '../src/preferences/signature-content';
+import { cleanSignature, MAX_SIGNATURE_BYTES, MAX_SIGNATURE_IMAGE_BYTES, MAX_SIGNATURE_IMAGES, parseSignatureInput } from '../src/preferences/signature-content';
 
 describe('preferences (FOX-077)', () => {
   it('accepts a valid partial update', () => {
@@ -65,5 +65,48 @@ describe('signatures (FOX-079)', () => {
     let deep: object = t('x');
     for (let i = 0; i < 40; i++) deep = { type: 'blockquote', content: [deep] };
     expect(() => parseSignatureInput({ name: 'A', content: doc(deep) })).toThrow(BadRequestException);
+  });
+});
+
+describe('signature images (stored as data URIs, like Roundcube identity_image_size)', () => {
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  const dataUrl = (type: string, bytes: Buffer) => `data:${type};base64,${bytes.toString('base64')}`;
+  const img = (attrs: object) => ({ type: 'image', attrs });
+  const doc = (...nodes: object[]) => ({ type: 'doc', content: [{ type: 'paragraph', content: nodes }] });
+  const sig = (...nodes: object[]) => parseSignatureInput({ name: 'Logo', content: doc(...nodes) });
+  const imagesOf = (d: { content?: { content?: { type: string; attrs?: Record<string, unknown> }[] }[] }) =>
+    (d.content?.[0]?.content ?? []).filter((n) => n.type === 'image');
+
+  it('keeps a small PNG, JPEG or GIF with alt text and size, and drops editor-only attributes', () => {
+    const src = dataUrl('image/png', PNG);
+    const out = sig(img({ src, alt: 'Example Hosting logo', width: 120, height: 40, contentId: 'x@foxalora', title: 'x' }));
+    expect(imagesOf(out.content as never)).toEqual([{ type: 'image', attrs: { src, alt: 'Example Hosting logo', width: 120, height: 40 } }]);
+    const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+    expect(imagesOf(sig(img({ src: dataUrl('image/gif', gif) })).content as never)).toHaveLength(1);
+  });
+
+  it('drops remote images, SVG, WebP, and images whose bytes do not match the declared type', () => {
+    for (const src of [
+      'https://tracker.example/logo.png',
+      dataUrl('image/svg+xml', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')),
+      dataUrl('image/webp', Buffer.from('RIFF\0\0\0\0WEBPVP8 ')),
+      dataUrl('image/jpeg', PNG), // declared JPEG, actually PNG
+      dataUrl('image/png', Buffer.from('<html>not an image</html>')),
+      'data:image/png;base64,@@@notbase64',
+    ]) {
+      expect(imagesOf(sig(img({ src })).content as never), src.slice(0, 40)).toEqual([]);
+    }
+  });
+
+  it('refuses images over the size limit and too many images, with a clear message', () => {
+    const big = Buffer.concat([PNG, Buffer.alloc(MAX_SIGNATURE_IMAGE_BYTES)]);
+    expect(() => sig(img({ src: dataUrl('image/png', big) }))).toThrow(/64 KB/);
+    const many = Array.from({ length: MAX_SIGNATURE_IMAGES + 1 }, () => img({ src: dataUrl('image/png', PNG) }));
+    expect(() => sig(...many)).toThrow(/at most 3 images/);
+  });
+
+  it('still limits the text part of a signature', () => {
+    const src = dataUrl('image/png', PNG);
+    expect(() => sig(img({ src }), { type: 'text', text: 'x'.repeat(MAX_SIGNATURE_BYTES) })).toThrow(BadRequestException);
   });
 });

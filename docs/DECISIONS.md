@@ -151,7 +151,8 @@ Short records of project decisions, including deviations from the PRD or SAD (CL
 - **Decision:**
   - **Closing the composer saves a draft** to the server's Drafts folder (IMAP APPEND), also every 30 seconds while writing (FOX-055). A saved draft replaces the previous version: the new one is stored first, then the old one removed. Opening a draft offers "Continue writing"; sending removes it. Only **Discard** throws a message away, after a confirmation.
   - **Confirmation dialogs** (one accessible `alertdialog`, focus starts on the safe button) for actions that cannot be undone: delete for good from Trash, discard a message, delete a contact or signature, reset settings, clear address history.
-  - **Undo instead of a dialog** for moving a message to Trash: the toast offers Undo (moves it back). A dialog for every delete slows everyone down; undo is safer and quicker.
+  - **Moving a message to Trash** asks first ("Move this message to Trash? You can restore it from Trash later.") and the toast still offers Undo. *Changed the same day at the product owner's request; the first version had Undo only.*
+  - **Restore in Trash:** opening a message in Trash shows Restore, which moves it back to the folder it was deleted from when that is known (messages deleted in the current session), otherwise to the Inbox, because IMAP does not record where a message came from. Delete in Trash reads "Delete for good" and asks first.
   - **Address history** (`recent_recipients`, migration 0003): after a successful send, the recipient addresses (address only, use count, last use) are kept for suggestions, at most 500 per mailbox. On by default; Settings can turn it off and clear it.
   - **First-run guide** (7 short steps with a highlight), shown once (`onboarded` preference) and available from Help and Settings. **Tooltips** on hover and keyboard focus for every button, in plain words.
   - **Accessibility:** no sound is used anywhere, so nothing depends on hearing; every status is on-screen text and announced to screen readers; error messages stay until dismissed and other messages pause while pointed at; skip link and `main` landmarks.
@@ -163,3 +164,31 @@ Short records of project decisions, including deviations from the PRD or SAD (CL
 **Operational impact**
 - Run migrations (0003). The Drafts folder must exist with the SPECIAL-USE \Drafts flag (Dovecot and Exim test servers have it); without it, saving a draft reports that there is no Drafts folder.
 - Drafts lose inline images when reopened (the viewer cannot show cid: images yet) and do not keep original attachments.
+
+## D-008 Images in signatures
+
+- **Date:** 2026-11-12
+- **Decided by:** product owner (asked for images in signatures, as in Roundcube); details by development
+- **Decision:** Signatures may contain up to 3 images (a logo or photo), PNG, JPEG or GIF, at most 64 KB each. As in Roundcube (`identity_image_size`, default 64 KB, images stored as data URIs and turned into inline attachments on send by `extract_inline_images`), the image is kept inside the signature document. When a message is written, each signature image goes into the composer's image store and is sent as an inline `cid:` attachment through the same validated path as other inline images. Our own implementation, no Roundcube code copied.
+- **Deviation from D-003/D-006:** signatures were text, formatting and links only.
+
+**Security impact**
+- The server accepts only `data:` URIs whose bytes really are PNG, JPEG or GIF (magic-byte check, declared type must match); remote images, SVG (can carry scripts) and WebP (missing in Outlook) are dropped. Images over 64 KB or more than 3 are refused with a clear message. Editor-only attributes are removed; alt text, width and height are kept within limits.
+- Recipients never load anything remote: the image travels with each message.
+- The draft production Content-Security-Policy (`deploy/nginx.conf.template`) now allows `blob:` images. The composer shows inline-image previews as `blob:` URLs, which only point at data the page itself created; without this, inline and signature images would not show in production. The message frame keeps its own stricter policy (images from `data:` only).
+
+**Operational impact**
+- Signatures with images are larger (up to about 270 KB of JSON); request bodies stay within the 1 MB limit.
+- Pasting an image into the signature editor does not add it; the image button checks type and size first.
+
+## D-009 Development mail servers never deliver to the internet
+
+- **Date:** 2026-11-12
+- **Decided by:** development, after a test message from `carol@dovecot.test` reached Gmail and bounced
+- **Decision:** The local Postfix + Dovecot server delivers only to its own test domain. Mail to any other address is returned at once with "Foxalora development server - mail to outside addresses is not delivered" (`dev/mailservers/postfix-main.cf`, mounted by `docker-compose.yml` and `dev/up.sh`; `dev/up.sh` recreates an older container automatically, keeping its mail). The Exim test server already routes its own domain only. Unnamed message parts get names by type (`delivery-report.txt`, `attached-message.eml`), so bounces read clearly.
+
+**Security impact**
+- Test mail cannot reach real people, and a developer's machine cannot be used to send mail from fake domains to the internet.
+
+**Operational impact**
+- To test delivery to real mailboxes, map a real domain to a real mail server with the operator CLI (`server:add`, `domain:map`) on your own machine. Never commit those settings or credentials.

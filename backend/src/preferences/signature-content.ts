@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { sniff } from '../mail/inline-images';
 
 /**
  * Signatures are stored as editor documents (Tiptap JSON) and cleaned on save (FOX-079):
@@ -7,6 +8,12 @@ import { BadRequestException } from '@nestjs/common';
  */
 export const MAX_SIGNATURE_BYTES = 16_000;
 export const MAX_SIGNATURES = 20;
+/** Images are stored in the signature as data URIs, like Roundcube's identity_image_size (64 KB). */
+export const MAX_SIGNATURE_IMAGE_BYTES = 64 * 1024;
+export const MAX_SIGNATURE_IMAGES = 3;
+// Formats every mail client shows. SVG can carry scripts and WebP is missing in Outlook.
+const DATA_IMAGE = /^data:(image\/(?:png|jpeg|gif));base64,([A-Za-z0-9+/]+={0,2})$/;
+const MAX_IMAGE_B64 = Math.ceil((MAX_SIGNATURE_IMAGE_BYTES * 4) / 3) + 4;
 const MAX_DEPTH = 12;
 
 type Json = Record<string, unknown>;
@@ -43,11 +50,29 @@ function cleanAttrs(attrs: unknown, allowed: Record<string, AttrCheck>): Json | 
   return Object.keys(out).length ? out : undefined;
 }
 
-function cleanNode(node: unknown, depth: number): Json | null {
+/** A signature image: an inline data URI whose bytes really are PNG, JPEG or GIF. Anything else is dropped. */
+function cleanImage(attrs: unknown, state: { images: number }): Json | null {
+  const a = (attrs ?? {}) as Json;
+  const m = typeof a.src === 'string' ? DATA_IMAGE.exec(a.src) : null;
+  if (!m) return null; // remote, SVG, WebP or malformed
+  if (m[2].length > MAX_IMAGE_B64) throw new BadRequestException('signature images can be up to 64 KB each');
+  const bytes = Buffer.from(m[2], 'base64');
+  if (!bytes.length || sniff(bytes) !== m[1]) return null;
+  if (bytes.length > MAX_SIGNATURE_IMAGE_BYTES) throw new BadRequestException('signature images can be up to 64 KB each');
+  if (++state.images > MAX_SIGNATURE_IMAGES) throw new BadRequestException(`a signature can have at most ${MAX_SIGNATURE_IMAGES} images`);
+  const out: Json = { src: a.src };
+  // eslint-disable-next-line no-control-regex -- control characters are rejected on purpose
+  if (typeof a.alt === 'string' && a.alt.length <= 200 && !/[\u0000-\u001f\u007f]/.test(a.alt)) out.alt = a.alt;
+  for (const k of ['width', 'height'] as const) if (intIn(1, 2000)(a[k])) out[k] = a[k];
+  return { type: 'image', attrs: out };
+}
+
+function cleanNode(node: unknown, depth: number, state: { images: number }): Json | null {
   if (depth > MAX_DEPTH) throw new BadRequestException('signature is nested too deeply');
   if (!node || typeof node !== 'object') return null;
   const n = node as Json;
   const type = n.type as string;
+  if (type === 'image') return cleanImage(n.attrs, state);
   if (typeof type !== 'string' || !Object.hasOwn(NODES, type)) return null; // unknown: dropped with its content
   const out: Json = { type };
   const attrs = cleanAttrs(n.attrs, NODES[type]);
@@ -67,12 +92,12 @@ function cleanNode(node: unknown, depth: number): Json | null {
     if (marks.length) out.marks = marks;
     return out;
   }
-  if (Array.isArray(n.content)) out.content = n.content.map((c) => cleanNode(c, depth + 1)).filter(Boolean);
+  if (Array.isArray(n.content)) out.content = n.content.map((c) => cleanNode(c, depth + 1, state)).filter(Boolean);
   return out;
 }
 
 export function cleanSignature(doc: unknown): Json {
-  const clean = cleanNode(doc, 0);
+  const clean = cleanNode(doc, 0, { images: 0 });
   if (!clean || clean.type !== 'doc') throw new BadRequestException('signature must be an editor document');
   return clean;
 }
@@ -86,6 +111,12 @@ export function parseSignatureInput(body: unknown): SignatureInput {
   // eslint-disable-next-line no-control-regex -- control characters are rejected on purpose
   if (!name || name.length > 100 || /[\u0000-\u001f\u007f]/.test(name)) throw new BadRequestException('invalid signature name');
   if (b.isDefault !== undefined && typeof b.isDefault !== 'boolean') throw new BadRequestException('invalid default flag');
-  if (JSON.stringify(b.content ?? null).length > MAX_SIGNATURE_BYTES) throw new BadRequestException('signature is too long');
-  return { name, content: cleanSignature(b.content), isDefault: b.isDefault === true };
+  // Cheap size guard before parsing: text allowance plus the largest allowed images.
+  if (JSON.stringify(b.content ?? null).length > MAX_SIGNATURE_BYTES + MAX_SIGNATURE_IMAGES * (MAX_IMAGE_B64 + 200)) {
+    throw new BadRequestException('signature is too long');
+  }
+  const content = cleanSignature(b.content);
+  // The text and formatting stay within MAX_SIGNATURE_BYTES; images are limited separately.
+  if (JSON.stringify(content, (k, v) => (k === 'src' ? '' : v)).length > MAX_SIGNATURE_BYTES) throw new BadRequestException('signature is too long');
+  return { name, content, isDefault: b.isDefault === true };
 }

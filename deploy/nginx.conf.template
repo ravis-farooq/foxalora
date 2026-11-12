@@ -20,7 +20,7 @@ server {
     add_header X-Frame-Options "DENY" always;
     # style-src 'unsafe-inline' is needed by the sandboxed message frame (srcdoc inherits this policy).
     # Verify in a browser after install; tighten once the separate render origin exists.
-    add_header Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'" always;
+    add_header Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-ancestors 'none'" always;
 
     client_max_body_size 30m;
 

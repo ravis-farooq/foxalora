@@ -4,6 +4,7 @@ import { EmailComposer, type Signature } from '../editor/composer/EmailComposer'
 import { DEFAULT_TOOLBAR, type ToolbarItem } from '../editor/composer/Toolbar';
 import { ImageStore } from '../editor/images';
 import type { EmailOutput, QuotedOriginal } from '../editor/serialize';
+import { withInlineSignatureImages } from '../editor/signature-images';
 import { useConfirm } from '../ui/confirm-context';
 import { Icon } from '../ui/icons';
 import { useToast } from '../ui/toast-context';
@@ -70,6 +71,8 @@ export default function Compose({ init, onClose, onSent, onDraftSaved, signature
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState<'' | 'saving' | 'saved' | 'failed'>(init.draftId ? 'saved' : '');
   const images = useMemo(() => new ImageStore(), []);
+  // Signature images travel as inline attachments of this message.
+  const composerSignatures = useMemo(() => withInlineSignatureImages(signatures ?? {}, images), [signatures, images]);
   const output = useRef<EmailOutput | null>(null);
   const draftId = useRef(init.draftId);
   // What is already safe (saved, or untouched since opening). Until the user first types,
@@ -259,7 +262,7 @@ export default function Compose({ init, onClose, onSent, onDraftSaved, signature
           quoted={init.quoted}
           images={images}
           toolbar={TOOLBAR}
-          signatures={signatures}
+          signatures={composerSignatures}
           // A continued draft already contains its signature.
           defaultSignatureId={init.initialHtml === undefined ? defaultSignatureId : undefined}
           sending={sending}
