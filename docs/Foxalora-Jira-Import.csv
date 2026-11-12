@@ -1,0 +1,1167 @@
+Issue Id,Parent,Issue Type,Summary,Description,Priority,Labels,Story point estimate
+E01,,Epic,Foundation and project setup,"Repository, CI, test mail servers and early decisions so the team can build safely.",Medium,release-Prototype,
+E02,,Epic,Server registry and tenants,"Admin-managed tenants, mail servers and domain mappings; tenant isolation.",Medium,release-MVP,
+E03,,Epic,Authentication and sessions,"Direct login, encrypted session vault, rate limits, cookies and CSRF.",Medium,release-MVP,
+E04,,Epic,Email adapter (IMAP and SMTP),"The only component that talks to mail servers; SSRF guard, TLS, UID handling.",Medium,release-MVP,
+E05,,Epic,Mailbox and folders,"Folder list, message list, flags, move, delete, custom folders.",Medium,release-MVP,
+E06,,Epic,Message viewing and safe rendering,Show messages; sanitize and isolate untrusted HTML.,Medium,release-MVP,
+E07,,Epic,Composition and drafts,"Compose, reply, forward, drafts, signatures, send.",Medium,release-MVP,
+E08,,Epic,Attachments,"Upload, download, preview with strict validation.",Medium,release-MVP,
+E09,,Epic,Search,Server-side IMAP search without a local index.,Medium,release-MVP,
+E10,,Epic,Contacts,Application-managed address book and import/export.,Medium,release-MVP,
+E11,,Epic,Preferences and signatures,Per-user settings stored apart from mailbox content.,Medium,release-MVP,
+E12,,Epic,Admin console and branding,"Hosting administrator configuration, branding, policies, audit view.",Medium,release-MVP,
+E13,,Epic,Security verification,"ASVS L2 evidence, security test suites, penetration test, disclosure policy.",Medium,release-MVP,
+E14,,Epic,"Installer, deployment and updates","Docker stack, install wizard, configuration, upgrades and rollback.",Medium,release-MVP,
+E15,,Epic,"Web UI shell, responsive design, accessibility, i18n","Three-pane desktop layout, mobile layout, WCAG 2.2 AA, English and Arabic RTL.",Medium,release-MVP,
+E16,,Epic,Hosting panel integration and SSO,"Integration framework, signed SSO, cPanel first; Plesk and DirectAdmin next.",Medium,release-MVP,
+E17,,Epic,Observability and performance,"Metrics, health, structured logs without secrets, load tests.",Medium,release-MVP,
+E18,,Epic,Documentation and release,"API, admin and user docs, licence inventory, release checklist.",Medium,release-MVP,
+E19,,Epic,"Rules, filters and identities","Roadmap V1.2: email rules, filters, multiple identities.",Medium,release-V1.2,
+E20,,Epic,"Scheduling, snooze, undo send",Roadmap V1.3.,Medium,release-V1.3,
+E21,,Epic,"Multiple accounts, unified inbox, PWA",Roadmap V2.0.,Medium,release-V2.0,
+E22,,Epic,Advanced security and OpenPGP,Roadmap V2.1.,Medium,release-V2.1,
+E23,,Epic,AI assistance,"Roadmap V3.0: translation, summarization, organization.",Medium,release-V3.0,
+FOX-001,E01,Task,Run prototype against Dovecot and Exim test servers,"As the team, we want the prototype running on two real mail stacks so we know which assumptions hold.
+
+Acceptance criteria:
+- Prototype installs and starts from the README
+- Login, folder list, message list, open, send tested on both servers
+- Defects and compatibility notes written up
+
+PRD refs: 19 (prototype)",High,release-Prototype spike,5
+FOX-002,E01,Task,"Repository, GPL-3.0 licence and contribution rules","As maintainers, we want licence and contribution rules in place before code is shared.
+
+Acceptance criteria:
+- LICENSE (GPL-3.0-or-later) and skins/plugins exception notice present (licence decided 2026-11-12, see docs/DECISIONS.md)
+- CONTRIBUTING, code of conduct and SECURITY.md present
+- Branch protection and review rules enabled
+
+PRD refs: 13",High,release-Prototype task,2
+FOX-003,E01,Task,"CI pipeline with lint, unit tests and security scans","As developers, we want every change checked automatically.
+
+Acceptance criteria:
+- Lint, type check and unit tests run on every pull request
+- Dependency scan and secret scan block merges on findings above agreed severity
+- SAST runs on the main branch
+
+PRD refs: 5.11, NFR-014",High,release-MVP task,5
+FOX-004,E01,Task,Dev environment with Postfix+Dovecot and Exim test mail servers,"As developers, we want local mail servers with seeded mailboxes.
+
+Acceptance criteria:
+- One command starts both servers with test users
+- Seed script creates folders, flagged, unread and attachment messages
+- Documented ports and credentials
+
+PRD refs: 10",High,release-Prototype task,5
+FOX-005,E01,Task,Resolve open decisions OPEN-1 to OPEN-4,"As architects, we want the open SAD decisions settled and recorded.
+
+Acceptance criteria:
+- Each open item has an ADR with justification, security impact and operational impact
+- SAD status updated to approved
+
+PRD refs: 15, SAD 11",High,release-MVP spike,3
+FOX-006,E02,Story,Mail server CRUD with validation,"As a hosting admin, I want to register IMAP and SMTP servers so users can be routed to them.
+
+Acceptance criteria:
+- Hostname, ports, TLS policy and allow-private flag saved per server
+- Only allowed mail ports accepted
+- Unencrypted policy refused in production
+- Change written to audit log
+
+PRD refs: AUTH-004, AUTH-005, 5.5",High,release-MVP story,5
+FOX-007,E02,Story,Domain-to-server mapping,"As a hosting admin, I want to map email domains to servers.
+
+Acceptance criteria:
+- Domain unique per tenant
+- Mapping to a missing server rejected
+- Login looks up server only through this mapping
+
+PRD refs: Module 9",High,release-MVP story,3
+FOX-008,E02,Story,Generic failure for unmapped domains,"As the system, I must not reveal which domains are hosted.
+
+Acceptance criteria:
+- Unmapped domain returns the same message and status class as a wrong password
+- Response time does not differ measurably
+
+PRD refs: AUTH-012",High,release-MVP story,2
+FOX-009,E02,Task,Tenant model and tenant resolution,"As the platform, I need a tenant on every request derived from the session.
+
+Acceptance criteria:
+- Tenant id never read from request body or query
+- Repository layer refuses queries without tenant id
+- Admin roles scoped to one tenant
+
+PRD refs: 5.9, NFR-003",High,release-MVP task,5
+FOX-010,E02,Task,PostgreSQL row-level security policies,"As security, I want the database to fail closed if code forgets a tenant filter.
+
+Acceptance criteria:
+- RLS on all tenant tables
+- App role cannot bypass RLS
+- Test proves a query without tenant context returns no rows
+
+PRD refs: 5.9, 5.7",High,release-MVP task,8
+FOX-011,E02,Task,"Database schema, migrations and seed","As developers, we want versioned migrations for all entities in SAD section 5.
+
+Acceptance criteria:
+- UUID keys, foreign keys, indexes, tenant_id on all tenant tables
+- Migrations run on empty and upgraded databases in CI
+- Least-privilege runtime role separate from migration role
+
+PRD refs: 6.4",High,release-MVP task,5
+FOX-012,E02,Story,Envelope encryption for sensitive configuration,"As security, I want panel tokens and signing secrets encrypted with keys held outside the database.
+
+Acceptance criteria:
+- Data key per record wrapped by a master key
+- Master key not in repository, image or database
+- Rotation procedure documented and tested
+
+PRD refs: 5.7",High,release-MVP story,5
+FOX-013,E03,Story,Direct login with IMAP and SMTP verification,"As an email user, I want to sign in with my full address and password.
+
+Acceptance criteria:
+- Valid credentials create a session
+- Both IMAP and SMTP authentication are verified
+- Invalid credentials return one generic message
+- Password not logged anywhere
+
+PRD refs: AUTH-001, AUTH-002, AUTH-003",High,release-MVP story,5
+FOX-014,E03,Story,Configurable login rate limits,"As a hosting admin, I want brute-force attempts throttled.
+
+Acceptance criteria:
+- Limits per IP and per account configurable in admin settings
+- Counters shared across instances through Redis
+- Throttled attempts audited without the password
+- Failed logins add a growing delay per account and IP instead of a long account lockout, so nobody can lock another user out
+
+PRD refs: AUTH-011, 5.6",High,release-MVP story,3
+FOX-015,E03,Story,Generic authentication failure messages,"As security, I want no account enumeration.
+
+Acceptance criteria:
+- Same message for unknown domain, wrong password, unreachable server and blocked destination
+- Test compares responses for all cases
+
+PRD refs: AUTH-012",High,release-MVP story,1
+FOX-016,E03,Story,Encrypted session vault with expiry,"As security, I want mailbox passwords held only encrypted and briefly.
+
+Acceptance criteria:
+- AES-256-GCM with key from secrets store
+- Idle and absolute expiry from admin settings
+- Entry destroyed on logout and expiry
+- Password never returned by any API
+
+PRD refs: AUTH-007, AUTH-008, 5.2",High,release-MVP story,5
+FOX-017,E03,Task,Move session vault to Redis,"As operators, we want sessions to survive restarts and work across instances.
+
+Acceptance criteria:
+- Same encryption as in-memory vault
+- Tenant-prefixed keys
+- Redis password required
+- Restart test keeps active sessions until expiry
+
+PRD refs: 5.2, 6.1",High,release-MVP task,5
+FOX-018,E03,Task,Vault key management and rotation,"As security, I want the vault key rotatable without logging everyone out forever.
+
+Acceptance criteria:
+- Two keys accepted during rotation
+- Documented rotation runbook
+- Test covers old-key entries during rotation
+
+PRD refs: 5.2",High,release-MVP task,5
+FOX-019,E03,Story,"Secure session cookies, rotation and CSRF","As security, I want strong browser session handling.
+
+Acceptance criteria:
+- HttpOnly, Secure, SameSite=Strict
+- New session id issued at login
+- State-changing requests need custom header
+- Test shows cross-site requests fail
+
+PRD refs: 5.6",High,release-MVP story,3
+FOX-020,E03,Story,Remember me within security policy,"As an email user, I want longer sessions on trusted devices if my host allows it.
+
+Acceptance criteria:
+- Option shown only when admin policy allows
+- Longer expiry still absolute-capped
+- Disabled by default
+
+PRD refs: Login experience",Medium,release-MVP story,3
+FOX-021,E03,Story,Branded login page with support contact,"As a hosting admin, I want my logo and support details on the login page.
+
+Acceptance criteria:
+- Logo, name and support email from settings
+- Forgot-password text points to host guidance
+- Page passes accessibility checks
+
+PRD refs: Login experience",High,release-MVP story,3
+FOX-022,E03,Story,Password change through panel integration,"As an email user, I want to change my password where the host supports it.
+
+Acceptance criteria:
+- Option shown only when the tenant's panel adapter supports it
+- Foxalora never changes passwords itself
+- Session ends after change
+
+PRD refs: AUTH-009",Medium,release-V1.1 story,5
+FOX-023,E04,Story,ImapService interface and implementation,"As developers, we want one IMAP interface hiding server differences.
+
+Acceptance criteria:
+- Connect, authenticate, list folders, fetch, search, move, delete, flags, manage folders, monitor, disconnect
+- Results and errors normalized
+- Unit tests with mocked server and integration tests on Dovecot
+
+PRD refs: 6.3",High,release-MVP story,8
+FOX-024,E04,Story,SmtpService interface and implementation,"As developers, we want one SMTP interface.
+
+Acceptance criteria:
+- Connect, authenticate, validate recipients, send HTML and text with attachments, handle delivery errors, close
+- Header injection blocked
+- Integration tests on both test servers
+
+PRD refs: 6.3",High,release-MVP story,5
+FOX-025,E04,Story,SSRF guard for mail connections,"As security, I want connections only to approved destinations.
+
+Acceptance criteria:
+- DNS resolved and every address checked
+- Loopback, private, link-local and metadata ranges blocked unless server flag allows
+- Connection pinned to validated IP with hostname-verified TLS
+- Rejections audited
+- Test suite includes rebinding case
+
+PRD refs: 5.5",High,release-MVP story,5
+FOX-026,E04,Story,TLS policy enforcement,"As security, I want no silent downgrade.
+
+Acceptance criteria:
+- TLS 1.2 minimum
+- Certificate and hostname verification always on
+- STARTTLS failure is an error
+- Tests with expired and mismatched certificates
+
+PRD refs: AUTH-006, 5.3",High,release-MVP story,3
+FOX-027,E04,Story,UID and UIDVALIDITY handling,"As an email user, I want message actions to hit the right message.
+
+Acceptance criteria:
+- API ids encode folder, UIDVALIDITY and UID
+- UIDVALIDITY change returns folder_reset and clears client cache
+- No sequence numbers exposed
+
+PRD refs: 6.3",High,release-MVP story,3
+FOX-028,E04,Story,Normalized adapter errors,"As an email user, I want clear messages when a mail server is down.
+
+Acceptance criteria:
+- Timeouts, auth failure, unavailable and protocol errors map to stable codes
+- UI shows cached view with a notice during outages
+
+PRD refs: NFR-006",High,release-MVP story,5
+FOX-029,E04,Story,Per-session IMAP connection pool,"As an operator, I want fewer connections and faster pages.
+
+Acceptance criteria:
+- At most two connections per session
+- Idle connections closed after configurable time
+- Pool cleaned on logout
+- Load test shows improved first-page time
+
+PRD refs: 9",High,release-MVP story,8
+FOX-030,E04,Story,IMAP IDLE with server-sent events,"As an email user, I want new mail to appear without refreshing.
+
+Acceptance criteria:
+- IDLE on open folder where supported
+- Events delivered through /events
+- Polling fallback when IDLE missing
+
+PRD refs: MAIL-017",Medium,release-MVP story,8
+FOX-031,E04,Task,Mail server compatibility matrix,"As the team, we want to know which servers are supported.
+
+Acceptance criteria:
+- Core tests pass on Dovecot and one more server
+- Courier, Exim and panel-hosted results documented
+- Known quirks listed
+
+PRD refs: NFR-013, 10",High,release-MVP task,8
+FOX-032,E05,Story,Folder list with special-use roles and counts,"As an email user, I want my standard folders recognized on any server.
+
+Acceptance criteria:
+- Roles from IMAP SPECIAL-USE first, admin name map second
+- Inbox, Sent, Drafts, Junk, Trash, Archive shown correctly
+- Total and unread counts shown
+
+PRD refs: MAIL-016, Module 2",High,release-MVP story,5
+FOX-033,E05,Story,Paged message list,"As an email user, I want a fast inbox that loads more as I scroll.
+
+Acceptance criteria:
+- Sender, subject, date, attachment, read and star state shown
+- Headers fetched without bodies
+- Page size capped on the server
+- Snippets loaded lazily
+
+PRD refs: MAIL-001 to MAIL-006, MAIL-012",High,release-MVP story,5
+FOX-034,E05,Story,"Mark read, unread and starred","As an email user, I want to flag messages.
+
+Acceptance criteria:
+- Changes appear in the list immediately and persist on the server
+- Opening a message marks it read unless preference says otherwise
+
+PRD refs: MAIL-007, MAIL-008",High,release-MVP story,2
+FOX-035,E05,Story,Move messages between folders,"As an email user, I want to organize mail.
+
+Acceptance criteria:
+- Single and bulk move
+- Failed move shows an error and restores the list
+- Works with UID MOVE or copy and delete fallback
+
+PRD refs: MAIL-009",High,release-MVP story,3
+FOX-036,E05,Story,Delete messages,"As an email user, I want delete to be safe.
+
+Acceptance criteria:
+- Delete moves to Trash
+- Delete in Trash is permanent after confirmation
+- Counts update
+
+PRD refs: MAIL-010",High,release-MVP story,2
+FOX-037,E05,Story,Bulk selection and actions,"As an email user, I want to act on many messages.
+
+Acceptance criteria:
+- Select page, select all in folder with confirmation
+- Actions: read, unread, star, move, delete
+
+PRD refs: MAIL-011",Medium,release-MVP story,5
+FOX-038,E05,Story,Custom folders,"As an email user, I want to create, rename and delete folders.
+
+Acceptance criteria:
+- Hierarchy delimiter handled per server
+- Special-use folders protected from deletion
+- Deleting a folder with messages asks for confirmation
+
+PRD refs: MAIL-014, MAIL-015",High,release-MVP story,5
+FOX-039,E05,Story,Mailbox change synchronization,"As an email user, I want changes made elsewhere to appear.
+
+Acceptance criteria:
+- Refresh and IDLE events update lists and counts
+- Deleted-elsewhere messages disappear without errors
+
+PRD refs: MAIL-018",High,release-MVP story,3
+FOX-040,E05,Story,Compact and comfortable density,"As an email user, I want to choose list density.
+
+Acceptance criteria:
+- Toggle in list header and preferences
+- Choice persists
+
+PRD refs: Module 2",High,release-MVP story,2
+FOX-041,E05,Story,Conversation threading,"As an email user, I want related messages grouped.
+
+Acceptance criteria:
+- Threads from References and In-Reply-To or server THREAD where available
+- Count and latest sender shown
+- Falls back to flat list on failure
+
+PRD refs: MAIL-013",Medium,release-MVP story,8
+FOX-042,E06,Story,Show text and HTML messages with headers,"As an email user, I want to read messages with sender, recipients and date.
+
+Acceptance criteria:
+- From, To, CC, BCC when available, date shown
+- Plain text shown when no HTML
+- Attachments listed
+
+PRD refs: VIEW-001 to VIEW-006",High,release-MVP story,5
+FOX-043,E06,Story,Server-side HTML sanitizer,"As security, I want untrusted HTML cleaned before display.
+
+Acceptance criteria:
+- Scripts, forms, frames, SVG, event handlers and dangerous URI schemes removed
+- Inline style url() removed
+- Links open in new tab with noopener and no referrer
+- Hostile sample corpus passes
+
+PRD refs: 3, 5.4",High,release-MVP story,8
+FOX-044,E06,Story,Sandboxed iframe with strict CSP,"As security, I want a second layer if the sanitizer fails.
+
+Acceptance criteria:
+- iframe has no script permission
+- CSP blocks all network except data images
+- Test shows injected script and remote request both blocked
+
+PRD refs: 5.4",High,release-MVP story,3
+FOX-045,E06,Story,Separate-origin render host,"As security, I want email content isolated from application cookies.
+
+Acceptance criteria:
+- Render token is one-time, short-lived and bound to one message
+- Render host serves no application cookies
+- Test shows frame cannot read parent storage or cookies
+
+PRD refs: 5.4, 5.6",High,release-MVP story,8
+FOX-046,E06,Story,Remote image blocking with opt-in,"As a privacy-conscious user, I want tracking images blocked.
+
+Acceptance criteria:
+- Remote images blocked by default
+- Banner offers load once or always for this sender
+- Preference and admin default respected
+
+PRD refs: Module 3",High,release-MVP story,3
+FOX-047,E06,Story,External link warning,"As an email user, I want a warning before suspicious links.
+
+Acceptance criteria:
+- Link target shown before leaving
+- Mismatched text and target flagged
+
+PRD refs: Module 3",High,release-MVP story,2
+FOX-048,E06,Story,Safe inline images,"As an email user, I want embedded images shown.
+
+Acceptance criteria:
+- cid images resolved from the same message
+- Only image types allowed
+- Size capped
+
+PRD refs: VIEW-008",High,release-MVP story,3
+FOX-049,E06,Story,"Reply, reply all and forward from viewer","As an email user, I want to answer from the message.
+
+Acceptance criteria:
+- Recipients, subject prefix and quoted body prepared correctly
+- Attachments included on forward when chosen
+
+PRD refs: VIEW-009 to VIEW-011",High,release-MVP story,3
+FOX-050,E06,Story,"Print, separate view and previous/next navigation","As an email user, I want convenience actions.
+
+Acceptance criteria:
+- Print layout without application chrome
+- Open in separate window
+- Previous and next keep list context
+
+PRD refs: VIEW-012 to VIEW-014",Medium,release-MVP story,5
+FOX-051,E07,Task,Tiptap email-editor spike,"As the team, we want to prove that Tiptap can be made email-specific before building the composer (Tiptap chosen, Squire fallback; see docs/DECISIONS.md D-003).
+
+Acceptance criteria:
+- Schema allows only email-safe content; unsupported pasted content is dropped
+- Serializer turns the document into email-safe HTML (inline styles, align attributes) and a plain-text alternative
+- Signature and quoted-original blocks kept separate from typed text
+- Inline images become cid: attachments; no remote loads from the editor
+- Paste cleanup for Word and Google Docs, tested with captured clipboard samples
+- Per-paragraph right-to-left support tested with Arabic
+- Results, open risks (Outlook rendering, Android keyboards, iOS Safari) and bundle size written to docs/EDITOR_SPIKE_TIPTAP.md
+
+PRD refs: Module 4, OPEN-3, D-003",High,release-MVP spike,3
+FOX-052,E07,Story,Compose with basic formatting,"As an email user, I want to write HTML or plain-text mail.
+
+Acceptance criteria:
+- Bold, italic, underline, lists, links, alignment, inline images
+- Plain-text mode available
+- Output sanitized before send
+
+PRD refs: COMP-001, COMP-007, COMP-008",High,release-MVP story,8
+FOX-053,E07,Story,"Recipients To, CC and BCC","As an email user, I want multiple recipients.
+
+Acceptance criteria:
+- Address validation and clear errors
+- Recipient count limit from admin policy
+- Autocomplete from contacts
+
+PRD refs: COMP-005, COMP-006",High,release-MVP story,3
+FOX-054,E07,Story,"Reply, reply all and forward composition","As an email user, I want correct prefilled drafts.
+
+Acceptance criteria:
+- Reply-all excludes my own addresses
+- Threading headers set
+- Quoted content formatted for HTML and text
+
+PRD refs: COMP-002 to COMP-004",High,release-MVP story,5
+FOX-055,E07,Story,Automatic draft saving,"As an email user, I want to avoid losing work.
+
+Acceptance criteria:
+- Draft saved to Drafts folder at intervals and on pause
+- Reopened draft restores recipients, body, attachments
+- Draft removed after send
+
+PRD refs: COMP-012",High,release-MVP story,5
+FOX-056,E07,Story,Warn before leaving unsaved compose,"As an email user, I want a warning when I might lose text.
+
+Acceptance criteria:
+- Browser and in-app navigation warn when changes are unsaved
+- No warning after a successful save
+
+PRD refs: COMP-016",High,release-MVP story,1
+FOX-057,E07,Story,Signatures in composer,"As an email user, I want my signature added.
+
+Acceptance criteria:
+- Default signature inserted on new, reply, forward as preference says
+- Position configurable
+
+PRD refs: COMP-013",High,release-MVP story,3
+FOX-058,E07,Story,Sender identity selection,"As an email user, I want to choose the From identity.
+
+Acceptance criteria:
+- Only addresses allowed by admin policy offered
+- Choice stored per draft
+
+PRD refs: COMP-014",Medium,release-MVP story,3
+FOX-059,E07,Story,Save sent message to Sent folder,"As an email user, I want a copy of what I sent.
+
+Acceptance criteria:
+- Behavior follows ADR for OPEN-4
+- No duplicate on servers that save automatically
+
+PRD refs: SAD OPEN-4",High,release-MVP story,3
+FOX-060,E07,Story,Send error handling,"As an email user, I want honest feedback if sending fails.
+
+Acceptance criteria:
+- Rejected recipients identified
+- Failed send keeps the draft
+- No automatic retry when acceptance is uncertain
+
+PRD refs: 6.3",High,release-MVP story,3
+FOX-061,E08,Story,Validated attachment upload,"As an email user, I want to attach files safely.
+
+Acceptance criteria:
+- Size, extension and sniffed MIME checked on the server
+- Random temporary names outside web root and without execute permission
+- Limit from admin setting and mail-server limit
+- Temporary files cleaned automatically
+
+PRD refs: Module 5, 5.8",High,release-MVP story,8
+FOX-062,E08,Story,Multiple attachments and drag-and-drop,"As an email user, I want fast attaching.
+
+Acceptance criteria:
+- Several files at once
+- Drag-and-drop onto composer
+- Progress and cancel
+
+PRD refs: COMP-009 to COMP-011",High,release-MVP story,5
+FOX-063,E08,Story,Show size and remove attachments before sending,"As an email user, I want control over attachments.
+
+Acceptance criteria:
+- Size shown per file and total
+- Remove before send
+- Warning near the limit
+
+PRD refs: COMP-015",High,release-MVP story,2
+FOX-064,E08,Story,Safe attachment download,"As an email user, I want to download files without risk.
+
+Acceptance criteria:
+- Forced attachment disposition, generic content type, nosniff
+- Filename sanitized in headers
+
+PRD refs: VIEW-007, 5.8",High,release-MVP story,2
+FOX-065,E08,Story,Image and PDF preview,"As an email user, I want to preview common files.
+
+Acceptance criteria:
+- Previews rendered on the separate origin
+- No scripts run from previews
+
+PRD refs: Module 5",Medium,release-MVP story,5
+FOX-066,E08,Story,Malware scanning hook,"As a hosting admin, I want to connect a scanner.
+
+Acceptance criteria:
+- Optional scanner endpoint
+- Infected uploads rejected with a clear message
+- Scanner failure behavior configurable
+
+PRD refs: 5.8",Medium,release-MVP story,5
+FOX-067,E08,Story,Archive and decompression limits,"As security, I want protection from archive bombs.
+
+Acceptance criteria:
+- Expansion size, depth and file count limited wherever archives are opened
+- Tests with bomb samples
+
+PRD refs: 5.8",High,release-MVP story,3
+FOX-068,E09,Story,Search with filters,"As an email user, I want to find mail by sender, recipient, subject, content, date range, attachment, unread and starred.
+
+Acceptance criteria:
+- Each filter maps to IMAP SEARCH criteria
+- Combined filters work
+- No local index created
+
+PRD refs: Module 6",High,release-MVP story,8
+FOX-069,E09,Story,Folder scope and cross-folder search,"As an email user, I want to search one folder or several.
+
+Acceptance criteria:
+- Scope selector in UI
+- Results show folder name
+- Total time capped by timeout setting
+
+PRD refs: Module 6",High,release-MVP story,5
+FOX-070,E09,Story,Search interface,"As an email user, I want a simple search bar with advanced filters.
+
+Acceptance criteria:
+- Search bar in top toolbar
+- Filter chips
+- Keyboard accessible
+
+PRD refs: 8.1",High,release-MVP story,5
+FOX-071,E09,Task,Search limits and timeouts,"As an operator, I want expensive searches contained.
+
+Acceptance criteria:
+- Per-session rate limit
+- Result cap and timeout
+- Clear message when limit reached
+
+PRD refs: 9",High,release-MVP task,3
+FOX-072,E10,Story,Contact CRUD,"As an email user, I want an address book.
+
+Acceptance criteria:
+- Create, edit, delete, search
+- Name, company, phone, multiple emails
+- Data scoped to tenant and mailbox
+
+PRD refs: Module 7",High,release-MVP story,5
+FOX-073,E10,Story,Recipient autocomplete and frequent contacts,"As an email user, I want addresses suggested while I type.
+
+Acceptance criteria:
+- Suggestions from contacts and frequently used addresses
+- Response under 300 ms for 5,000 contacts in test
+
+PRD refs: Module 7",High,release-MVP story,3
+FOX-074,E10,Story,CSV import,"As an email user, I want to bring in contacts.
+
+Acceptance criteria:
+- Column mapping step
+- Duplicate handling choice
+- Errors listed without losing valid rows
+
+PRD refs: Module 7",High,release-MVP story,3
+FOX-075,E10,Story,vCard import and export,"As an email user, I want standard contact files.
+
+Acceptance criteria:
+- Import vCard 3.0 and 4.0
+- Export all or selected
+- Round trip keeps names and addresses
+
+PRD refs: Module 7",High,release-MVP story,5
+FOX-076,E10,Task,Contact data isolation tests,"As security, I want proof one mailbox cannot see another's contacts.
+
+Acceptance criteria:
+- Cross-mailbox and cross-tenant tests in CI
+
+PRD refs: 5.9",High,release-MVP task,2
+FOX-077,E11,Story,Preferences storage and API,"As an email user, I want settings that follow me.
+
+Acceptance criteria:
+- Display name, signature, language, time zone, date format, theme, density, reply format, preview, remote images, notifications
+- Stored apart from mailbox content
+- Validation on all fields
+
+PRD refs: Module 8",High,release-MVP story,5
+FOX-078,E11,Story,Settings interface,"As an email user, I want a clear settings screen.
+
+Acceptance criteria:
+- All preferences editable
+- Changes apply immediately
+- Reset to admin defaults
+
+PRD refs: Module 8",High,release-MVP story,5
+FOX-079,E11,Story,Signature management,"As an email user, I want to create and edit signatures.
+
+Acceptance criteria:
+- Plain and rich text signatures
+- Default per identity
+- Sanitized on save
+
+PRD refs: COMP-013",High,release-MVP story,3
+FOX-080,E11,Story,Light and dark themes,"As an email user, I want a comfortable theme.
+
+Acceptance criteria:
+- Light, dark and system options
+- Contrast meets WCAG 2.2 AA in both
+
+PRD refs: 8.3",High,release-MVP story,3
+FOX-081,E12,Story,Separate administrator authentication,"As a hosting admin, I want admin access apart from mailbox login.
+
+Acceptance criteria:
+- Own accounts, hashed passwords, separate cookie
+- Roles scoped to tenant
+- Rate limits and audit
+
+PRD refs: 2",High,release-MVP story,5
+FOX-082,E12,Story,Branding settings,"As a hosting admin, I want my brand on the product.
+
+Acceptance criteria:
+- Application name, logo, colors, default language and theme
+- Logo type and size validated
+
+PRD refs: Module 9",High,release-MVP story,5
+FOX-083,E12,Story,Login page and support settings,"As a hosting admin, I want to customize the login page.
+
+Acceptance criteria:
+- Support email and message
+- Preview before saving
+
+PRD refs: Module 9",High,release-MVP story,3
+FOX-084,E12,Story,Security policy settings,"As a hosting admin, I want to set session timeout, upload limits, allowed domains and remember-me policy.
+
+Acceptance criteria:
+- Values validated and bounded
+- Changes apply without restart where practical
+- Each change audited
+
+PRD refs: Module 9",High,release-MVP story,5
+FOX-085,E12,Story,Audit log viewer,"As a hosting admin, I want to review security events without seeing mail content.
+
+Acceptance criteria:
+- Filter by type, date, domain
+- No secrets or message data in any entry
+- Export to CSV
+
+PRD refs: 5.10",High,release-MVP story,5
+FOX-086,E12,Story,System health page,"As a system administrator, I want to see component status.
+
+Acceptance criteria:
+- PostgreSQL, Redis, each mail server, version and update status
+- Not publicly accessible
+
+PRD refs: 2.3, NFR-012",Medium,release-MVP story,3
+FOX-087,E12,Story,Enable or disable features,"As a hosting admin, I want to turn features on or off.
+
+Acceptance criteria:
+- Toggles for remember-me, contacts import, remote images default, previews
+- UI hides disabled features
+
+PRD refs: 2.1",Medium,release-MVP story,3
+FOX-088,E13,Task,ASVS Level 2 requirement mapping,"As security, I want evidence for each control.
+
+Acceptance criteria:
+- Spreadsheet of ASVS items with status, evidence and owner
+- Reviewed before the penetration test
+
+PRD refs: 5.1",High,release-MVP task,5
+FOX-089,E13,Task,Security architecture sign-off,"As the product owner, I want the security design approved separately.
+
+Acceptance criteria:
+- SAD section 7 reviewed and approved in writing
+- Deviations recorded per PRD section 15
+
+PRD refs: 20",High,release-MVP task,3
+FOX-090,E13,Task,Log secret-scanning test,"As security, I want proof logs contain no secrets.
+
+Acceptance criteria:
+- E2E suite plants canary passwords and tokens
+- Automated scan of logs and error reports finds none
+
+PRD refs: 5.10",High,release-MVP task,3
+FOX-091,E13,Task,XSS test corpus for hostile emails,"As security, I want a growing set of malicious samples.
+
+Acceptance criteria:
+- Samples cover scripts, SVG, CSS, mutation XSS, URI schemes, remote loads
+- Run in CI against sanitizer, iframe and render host
+
+PRD refs: 5.4",High,release-MVP task,5
+FOX-092,E13,Task,"SSRF, CSRF and authorization test suites","As security, I want repeatable attack tests.
+
+Acceptance criteria:
+- SSRF cases include private ranges, rebinding, redirects
+- CSRF and cross-tenant tests automated
+- All pass in CI
+
+PRD refs: 5.11",High,release-MVP task,8
+FOX-093,E13,Task,DAST and upload testing,"As security, I want dynamic scans and hostile upload tests.
+
+Acceptance criteria:
+- DAST scheduled against staging
+- Upload tests cover type spoofing, traversal, archive bombs
+
+PRD refs: 5.11",High,release-MVP task,5
+FOX-094,E13,Task,Independent penetration test and remediation,"As the product owner, I want an outside assessment before release.
+
+Acceptance criteria:
+- Scope includes authentication, sessions, SSRF, HTML isolation, tenant isolation
+- No unresolved critical or high findings
+- Remediation report reviewed
+
+PRD refs: 5.11, 14",High,release-MVP task,13
+FOX-095,E13,Task,Vulnerability reporting and patch process,"As the community, we want a clear disclosure route.
+
+Acceptance criteria:
+- SECURITY.md with contact and timelines
+- Patch release process documented
+
+PRD refs: 5.11, 13",High,release-MVP task,2
+FOX-096,E13,Task,Security headers and CSP configuration,"As security, I want strict browser policies everywhere.
+
+Acceptance criteria:
+- CSP, HSTS, nosniff, referrer and frame policies on app, API and render host
+- Header test in CI
+
+PRD refs: 5.4, 5.6",High,release-MVP task,3
+FOX-097,E14,Task,Application Docker image,"As operators, we want a small, reproducible image.
+
+Acceptance criteria:
+- Multi-stage build, non-root user, read-only filesystem where possible
+- No secrets in layers
+
+PRD refs: NFR-008",High,release-MVP task,5
+FOX-098,E14,Task,"Compose stack with Nginx, PostgreSQL, Redis and render host","As operators, we want one working stack.
+
+Acceptance criteria:
+- Services start and pass health checks
+- Internal services not exposed
+- TLS configuration example included
+
+PRD refs: 7.1",High,release-MVP task,8
+FOX-099,E14,Story,Installation wizard,"As a hosting admin, I want guided setup.
+
+Acceptance criteria:
+- Collects app name, admin credentials, database, default mail settings, HTTPS status, branding, first tenant
+- Validates each step
+- Writes configuration safely
+
+PRD refs: 7.2",High,release-MVP story,8
+FOX-100,E14,Task,Installer lockout after setup,"As security, I want the wizard unreachable once finished.
+
+Acceptance criteria:
+- Wizard returns 404 once an administrator exists
+- Re-running requires file-system access
+
+PRD refs: 7.2",High,release-MVP task,2
+FOX-101,E14,Task,Externalized configuration and secrets,"As operators, I want to configure without code changes.
+
+Acceptance criteria:
+- Mail servers, ports, TLS, database, URLs, timeouts, limits, branding, log level all configurable
+- Secrets from files or manager, none in repository
+
+PRD refs: 7.3",High,release-MVP task,5
+FOX-102,E14,Task,Migration pipeline,"As operators, I want safe upgrades.
+
+Acceptance criteria:
+- Migrations run automatically before new version takes traffic
+- Tested on upgrade from previous release
+
+PRD refs: 7.4",High,release-MVP task,5
+FOX-103,E14,Story,"Update check, apply and rollback procedure","As a hosting admin, I want to update and roll back.
+
+Acceptance criteria:
+- Check for updates and read release notes
+- Documented apply steps
+- Documented rollback using previous image and backup
+
+PRD refs: 7.4",High,release-MVP story,8
+FOX-104,E14,Task,Egress firewall guide,"As operators, I want the app limited to approved mail hosts.
+
+Acceptance criteria:
+- Example rules for common firewalls
+- Test shows blocked connection to an unlisted host
+
+PRD refs: 5.5",High,release-MVP task,3
+FOX-105,E15,Story,Three-pane desktop layout,"As an email user, I want sidebar, list and reading pane.
+
+Acceptance criteria:
+- Layout with toolbar and search
+- Resizable panes
+- Keyboard navigation between panes
+
+PRD refs: 8.1",High,release-MVP story,5
+FOX-106,E15,Story,Mobile layout,"As an email user, I want a usable phone interface.
+
+Acceptance criteria:
+- Collapsible navigation, full-screen reader with back button, compose button, touch-friendly controls
+- Tested on Android and iOS browsers
+
+PRD refs: 8.2, NFR-005",High,release-MVP story,8
+FOX-107,E15,Task,WCAG 2.2 AA audit and fixes,"As an email user, I want an accessible product.
+
+Acceptance criteria:
+- Automated and manual audit
+- Keyboard-only and screen-reader pass on core flows
+- Findings fixed or accepted by decision
+
+PRD refs: NFR-010, 8.3",High,release-MVP task,8
+FOX-108,E15,Story,Internationalization with English and Arabic RTL,"As an email user, I want my language.
+
+Acceptance criteria:
+- All strings externalized
+- Arabic with right-to-left layout verified on all screens
+- Adding a language needs no code change
+
+PRD refs: NFR-011, 8.4",High,release-MVP story,8
+FOX-109,E15,Task,Cross-browser and mobile test suite,"As QA, I want core flows checked in all supported browsers.
+
+Acceptance criteria:
+- Playwright on Chrome, Firefox, Safari, Edge
+- Manual pass on Android and iOS
+
+PRD refs: NFR-004, 10",High,release-MVP task,5
+FOX-110,E16,Task,Prove SSO mailbox access on a real cPanel host,"As architects, we want to settle OPEN-1 with evidence.
+
+Acceptance criteria:
+- Each option (OAuth2, master auth, panel credential) tested or ruled out
+- Recommendation recorded as ADR
+
+PRD refs: SAD OPEN-1",High,release-MVP spike,5
+FOX-111,E16,Story,Integration adapter framework,"As developers, we want one interface for all panels.
+
+Acceptance criteria:
+- Interface for SSO, mailbox identification, domain mapping, redirects, account links, logout
+- App runs fully without any adapter
+
+PRD refs: Module 9",High,release-MVP story,5
+FOX-112,E16,Story,Signed SSO assertion exchange,"As a hosting admin, I want users to open webmail from the panel without typing a password.
+
+Acceptance criteria:
+- Signature, audience, expiry (60 s max) and single-use id verified
+- Assertion posted in a form body, never in a URL
+- Replay attempt rejected and audited
+
+PRD refs: AUTH-010, Module 1 Mode B, 5.2",High,release-MVP story,8
+FOX-113,E16,Story,cPanel adapter,"As a cPanel host, I want one-click webmail.
+
+Acceptance criteria:
+- Single sign-on, mailbox identification, login redirect, logout handling
+- Tested against a real cPanel instance
+
+PRD refs: Module 9, 11",High,release-MVP story,13
+FOX-114,E16,Story,Import domain-server mapping from panel,"As a hosting admin, I want mappings created automatically.
+
+Acceptance criteria:
+- Domains and servers read through panel API
+- Admin reviews before applying
+
+PRD refs: Module 9",Medium,release-MVP story,5
+FOX-115,E16,Story,Plesk adapter,"As a Plesk host, I want one-click webmail.
+
+Acceptance criteria:
+- Same capabilities as cPanel adapter
+- Tested against a real Plesk instance
+
+PRD refs: Module 9, 11",Medium,release-V1.1 story,13
+FOX-116,E16,Story,DirectAdmin adapter,"As a DirectAdmin host, I want one-click webmail.
+
+Acceptance criteria:
+- Same capabilities as cPanel adapter
+- Tested against a real DirectAdmin instance
+
+PRD refs: Module 9, 11",Medium,release-V1.1 story,13
+FOX-117,E17,Task,Prometheus metrics,"As operators, I want service metrics.
+
+Acceptance criteria:
+- Request, IMAP, SMTP, login, pool, vault and sanitizer metrics
+- No addresses or message data in labels
+
+PRD refs: NFR-012",High,release-MVP task,5
+FOX-118,E17,Task,Liveness and readiness checks,"As operators, I want reliable health endpoints.
+
+Acceptance criteria:
+- Liveness for process, readiness for database, Redis and optional mail-server probes
+- Endpoints not public
+
+PRD refs: NFR-012",High,release-MVP task,3
+FOX-119,E17,Task,Structured logging with request ids,"As operators, I want traceable logs without secrets.
+
+Acceptance criteria:
+- JSON logs with request id
+- Protocol logging off
+- Canary secret test passes
+
+PRD refs: 5.10",High,release-MVP task,3
+FOX-120,E17,Task,Mailbox size load tests,"As QA, I want results for 100, 10,000 and 100,000 messages and 50 folders.
+
+Acceptance criteria:
+- Reference environment documented
+- First-page and login times measured against NFR-001 and NFR-002
+
+PRD refs: 9, NFR-001, NFR-002",High,release-MVP task,8
+FOX-121,E17,Task,Concurrent user load tests,"As QA, I want results for 100 and 500 users.
+
+Acceptance criteria:
+- Response times, errors and mail-server load recorded
+- Report states results are benchmarks, not capacity guarantees
+
+PRD refs: 9",High,release-MVP task,8
+FOX-122,E18,Task,OpenAPI documentation,"As integrators, I want a complete API reference.
+
+Acceptance criteria:
+- Every endpoint, error shape and limit documented
+- Generated from code and published
+
+PRD refs: 6.5, 13",High,release-MVP task,5
+FOX-123,E18,Task,Administrator documentation,"As a hosting admin, I want to install and run the product.
+
+Acceptance criteria:
+- Install, configuration, mail-server mapping, branding, SSO, updates, backups
+
+PRD refs: 13",High,release-MVP task,5
+FOX-124,E18,Task,End-user documentation,"As an email user, I want help for common tasks.
+
+Acceptance criteria:
+- Login, folders, compose, attachments, search, contacts, settings
+- Available in English and Arabic
+
+PRD refs: 13",High,release-MVP task,3
+FOX-125,E18,Task,"Production deployment, upgrade and rollback guides","As operators, I want runbooks.
+
+Acceptance criteria:
+- Production checklist
+- Tested upgrade and rollback walkthrough
+
+PRD refs: 13",High,release-MVP task,3
+FOX-126,E18,Task,Third-party dependency and licence inventory,"As maintainers, we want licence compliance.
+
+Acceptance criteria:
+- Generated inventory in release artifacts
+- Incompatible licences flagged
+
+PRD refs: 13",High,release-MVP task,2
+FOX-127,E18,Task,Release acceptance checklist,"As the product owner, I want the definition of done verified.
+
+Acceptance criteria:
+- Every item in PRD section 14 evidenced
+- Representative hosting deployment completed
+
+PRD refs: 14",High,release-MVP task,3
+FOX-128,E19,Story,Email rules and filters,"As an email user, I want automatic sorting.
+
+Acceptance criteria:
+- To be refined; depends on Sieve support in the mail server or an app-level rule engine decision
+
+PRD refs: 12",Medium,release-V1.2 story,13
+FOX-129,E19,Story,Multiple identities,"As an email user, I want several From identities.
+
+Acceptance criteria:
+- To be refined
+
+PRD refs: 12",Medium,release-V1.2 story,8
+FOX-130,E20,Story,"Scheduling, snooze and undo send","As an email user, I want to control timing.
+
+Acceptance criteria:
+- To be refined
+
+PRD refs: 12",Medium,release-V1.3 story,13
+FOX-131,E21,Story,"Multiple accounts, unified inbox and PWA","As an email user, I want several mailboxes in one place and an installable app.
+
+Acceptance criteria:
+- To be refined; needs vault design for several credentials
+
+PRD refs: 12",Medium,release-V2.0 story,21
+FOX-132,E22,Story,OpenPGP and advanced security,"As an email user, I want end-to-end encryption options.
+
+Acceptance criteria:
+- To be refined; key storage must stay in the browser
+
+PRD refs: 12",Medium,release-V2.1 story,21
+FOX-133,E23,Story,"AI assistance, translation and summarization","As an email user, I want help reading and writing.
+
+Acceptance criteria:
+- To be refined; privacy review required before any mail content leaves the server
+
+PRD refs: 12",Medium,release-V3.0 story,21
+FOX-134,E12,Story,TOTP two-step verification for administrators,"As a hosting admin, I want a second factor on the admin console so a stolen admin password is not enough.
+
+Acceptance criteria:
+- TOTP (RFC 6238) enrolment with QR code; secret encrypted at rest with the envelope key
+- One-time backup codes, stored hashed
+- Turning two-step off or resetting it needs a current code or a backup code
+- Installer and policy can require two-step for every admin account
+- Failed code attempts are rate limited and audited
+
+PRD refs: Scope change 2026-11-12 (S1); 2, 5.6",High,release-MVP story,3
+FOX-135,E03,Story,Optional TOTP two-step verification for mailbox users,"As an email user, I want to protect my webmail with a second factor.
+
+Acceptance criteria:
+- Tenant admin enables the feature; users opt in from settings
+- Code is asked after a successful IMAP login and before the session is issued
+- Backup codes; turning it off needs a current code
+- Not applied to SSO logins, where the panel already authenticated the user
+- Help text says the mail password still works in other mail apps
+- Secrets stored per tenant and encrypted; cross-tenant test passes
+
+PRD refs: Scope change 2026-11-12 (S2); 5.6",Medium,release-V1.1 story,5
+FOX-136,E06,Story,Sender trust indicator,"As an email user, I want a clear warning when a sender may be fake.
+
+Acceptance criteria:
+- Flags display names that contain an email address different from the real sender
+- Flags look-alike (IDN homograph, mixed-script) sender and link domains; works with FOX-047
+- Shows SPF, DKIM and DMARC results only from Authentication-Results headers whose server id matches the tenant's configured value; other such headers are ignored
+- Shows no indicator when results are unavailable, never a false 'verified'
+- Unit tests include forged-header samples
+
+PRD refs: Scope change 2026-11-12 (S3); Module 3, 5.4",High,release-MVP story,5
+FOX-137,E05,Story,Mailbox quota display,"As an email user, I want to see how full my mailbox is before mail starts bouncing.
+
+Acceptance criteria:
+- Uses IMAP QUOTA (RFC 9208) when the server advertises it
+- Shows used and total storage, with a warning above a configurable threshold (default 90%)
+- Hidden when the server has no QUOTA support
+- Value cached briefly; no extra IMAP connection per page view
+
+PRD refs: Scope change 2026-11-12 (S4); Module 2",High,release-MVP story,2
+FOX-138,E19,Story,Out-of-office auto-reply,"As an email user, I want to set an out-of-office reply without contacting support.
+
+Acceptance criteria:
+- ManageSieve adapter for Dovecot/Pigeonhole servers: vacation rule with subject, message, start and end date
+- cPanel uses cPanel's own autoresponder API instead of Sieve (confirm on a real cPanel host first)
+- Existing user Sieve rules are kept, not overwritten
+- Option hidden when neither method is available
+- ManageSieve connections go through the email adapter, SSRF guard and TLS policy
+
+PRD refs: Scope change 2026-11-12 (S5); 12 (vacation brought forward from V1.2 rules)",Medium,release-V1.1 story,8
+FOX-139,E14,Task,"Signed images, SBOM and build provenance","As a hosting company, we want to verify that the image we run is the one the project built.
+
+Acceptance criteria:
+- Lockfiles committed; builds use npm ci
+- CycloneDX SBOM generated and attached to every release
+- Container images signed (cosign) with a build provenance attestation
+- Release tags signed
+- Install and update docs show how to verify; the updater refuses unsigned images (with FOX-103)
+
+PRD refs: Scope change 2026-11-12 (S6); 5.11, 7.4, 13",High,release-MVP task,5
+FOX-140,E12,Story,Tamper-evident audit log,"As a hosting admin, I want to know if audit entries were changed or deleted.
+
+Acceptance criteria:
+- Each entry stores a hash of its content plus the previous entry's hash, per tenant
+- A verification job reports the first broken link
+- The latest hash can be exported or sent to an external log on a schedule
+- The application's database role can insert audit rows but not update or delete them
+- Entries still contain no secrets or mail content (with FOX-085)
+
+PRD refs: Scope change 2026-11-12 (S7); 5.10",High,release-MVP story,3
+FOX-141,E03,Story,Optional breached-password check,"As a hosting admin, I want users warned when their mail password appears in known breaches.
+
+Acceptance criteria:
+- Off by default; tenant admin enables it
+- Uses a k-anonymity range lookup: only the first 5 characters of the SHA-1 hash leave the server
+- Checked at login and at password change (with FOX-022); warns, never blocks login
+- Lookup failures are silent to the user and logged without the hash
+- Privacy note shown in admin settings
+
+PRD refs: Scope change 2026-11-12 (S8); 5.2",Medium,release-V1.1 story,2
+FOX-142,E03,Task,Fetch Metadata request filtering,"As the security team, we want cross-site requests rejected before they reach any handler.
+
+Acceptance criteria:
+- API rejects requests whose Sec-Fetch-Site is cross-site
+- Requests without Sec-Fetch headers still pass through the SameSite cookie and CSRF header checks
+- Tests cover allowed and rejected header combinations
+
+PRD refs: 5.6",High,release-MVP task,1
+FOX-143,E03,Task,Trusted proxy and trusted host lists,"As operators, we want client IPs and Host headers trusted only from known sources.
+
+Acceptance criteria:
+- X-Forwarded-For is used only when the request comes from a configured proxy address or range
+- Requests whose Host is not in the allowed list are rejected
+- Defaults match the shipped Nginx container
+- Closes gap D6 in docs/PRD_GAP_ANALYSIS.md
+
+PRD refs: 5.6, AUTH-011",High,release-MVP task,2
+FOX-144,E03,Task,Secret value type that cannot be logged,"As developers, we want mailbox passwords impossible to print by accident.
+
+Acceptance criteria:
+- Secret wrapper whose toString, toJSON and util.inspect return [redacted]
+- The vault returns only this type; the raw value is read in one place inside the email adapter
+- A lint rule or test fails when a Secret is passed to a logger
+- Covered by the canary secret test (FOX-119)
+
+PRD refs: 5.2, 5.10",High,release-MVP task,2
+FOX-145,E17,Task,fail2ban-compatible authentication log,"As a hosting admin, I want to block brute-force IPs with the tools I already use.
+
+Acceptance criteria:
+- One structured log line per failed login with the client IP and a hashed account id; never the password
+- Sample fail2ban filter and jail shipped in deploy/ and described in admin docs
+- Works with Docker's journald and file log drivers
+
+PRD refs: 5.6, 5.10",Medium,release-MVP task,2
+FOX-146,E17,Task,Load shedding and connection caps,"As operators, we want the service to stay up under overload.
+
+Acceptance criteria:
+- Configurable caps on IMAP connections per user, per tenant and per node
+- Above a cap the API returns 503 with Retry-After in the standard error shape
+- Rejected requests exported as a metric (FOX-117)
+
+PRD refs: NFR-006, 9",Medium,release-MVP task,3
+FOX-147,E12,Story,Extra security policies,"As a hosting admin, I want to restrict risky behaviour for my customers.
+
+Acceptance criteria:
+- Option to bind sessions to the client IP (off by default)
+- Option to disallow permanent delete and empty-folder actions
+- Each policy change audited (with FOX-084)
+
+PRD refs: Module 9, 5.6",Medium,release-MVP story,2

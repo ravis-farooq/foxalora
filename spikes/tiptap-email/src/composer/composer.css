@@ -1,0 +1,126 @@
+/* Gmail-like composer. Tokens first so a host app can theme it. */
+.fx-composer {
+  --fx-bg: #ffffff;
+  --fx-text: #202124;
+  --fx-muted: #5f6368;
+  --fx-line: #dadce0;
+  --fx-hover: #f1f3f4;
+  --fx-active: #e8f0fe;
+  --fx-active-text: #0b57d0;
+  --fx-primary: #0b57d0;
+  --fx-danger: #c5221f;
+  position: relative;
+  background: var(--fx-bg);
+  color: var(--fx-text);
+  border: 1px solid var(--fx-line);
+  border-radius: 12px;
+  font: 14px/1.5 Arial, Helvetica, sans-serif;
+}
+
+/* Body mirrors the sent HTML: one line per paragraph, no paragraph margins. */
+.fx-editor-wrap { position: relative; }
+.fx-body { min-height: 220px; padding: 16px; outline: none; }
+.fx-body p { margin: 0; }
+.fx-body h1 { font-size: 24px; margin: 0 0 8px; } .fx-body h2 { font-size: 20px; margin: 0 0 8px; } .fx-body h3 { font-size: 16px; margin: 0 0 8px; }
+.fx-body ul, .fx-body ol { margin: 0; padding-inline-start: 28px; }
+.fx-body blockquote { margin: 0; margin-inline-start: 0.8ex; border-inline-start: 2px solid #ccc; padding-inline-start: 1ex; }
+.fx-body hr { border: 0; border-top: 1px solid #ccc; margin: 12px 0; }
+.fx-body a { color: #1a73e8; }
+.fx-body img { max-width: 100%; height: auto; }
+.fx-body .ProseMirror-selectednode img, .fx-body img.ProseMirror-selectednode { outline: 2px solid var(--fx-primary); }
+.fx-body table { border-collapse: collapse; margin: 8px 0; table-layout: fixed; width: auto; min-width: 50%; }
+.fx-body td, .fx-body th { border: 1px solid #ccc; padding: 6px; vertical-align: top; min-width: 60px; position: relative; }
+.fx-body th { font-weight: bold; text-align: start; background: #f8f9fa; }
+.fx-body .selectedCell::after { content: ''; position: absolute; inset: 0; background: rgb(11 87 208 / 0.12); pointer-events: none; }
+.fx-body p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--fx-muted); float: inline-start; height: 0; pointer-events: none; }
+/* Beats ProseMirror's own `.ProseMirror [contenteditable="false"] { white-space: normal }`. */
+.fx-body.ProseMirror .fx-signature { white-space: pre-wrap; }
+.fx-signature { color: var(--fx-muted); margin-top: 12px; user-select: none; }
+.fx-signature.ProseMirror-selectednode { outline: 2px solid var(--fx-primary); border-radius: 4px; }
+
+/* Buttons */
+.fx-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 2px;
+  min-width: 32px; height: 32px; padding: 0 4px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--fx-muted); cursor: pointer; font: inherit;
+}
+.fx-btn:hover:not(:disabled) { background: var(--fx-hover); color: var(--fx-text); }
+.fx-btn[aria-pressed='true'], .fx-btn[aria-expanded='true'] { background: var(--fx-active); color: var(--fx-active-text); }
+.fx-btn:disabled { opacity: 0.38; cursor: default; }
+.fx-btn-text { padding: 0 6px; color: var(--fx-text); }
+.fx-btn-label { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-composer :focus-visible { outline: 2px solid var(--fx-primary); outline-offset: 1px; }
+.fx-danger:hover { color: var(--fx-danger) !important; }
+.fx-plain { border: 0; background: transparent; color: var(--fx-primary); font: inherit; padding: 6px 8px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.fx-plain:hover { background: var(--fx-hover); }
+.fx-primary, .fx-send { border: 0; background: var(--fx-primary); color: #fff; font: inherit; font-weight: 600; padding: 8px 20px; border-radius: 18px; cursor: pointer; }
+.fx-primary:hover, .fx-send:hover { filter: brightness(1.1); box-shadow: 0 1px 3px rgb(0 0 0 / 0.3); }
+.fx-link-btn { border: 0; background: none; color: var(--fx-primary); font: inherit; padding: 4px 0; cursor: pointer; }
+.fx-grow { flex: 1; }
+
+/* Formatting bar (Gmail shows it above the action row). One row; scrolls sideways on phones. */
+.fx-toolbar {
+  display: flex; align-items: center; gap: 1px; margin: 0 12px; padding: 2px 4px;
+  border-radius: 8px; box-shadow: 0 1px 2px rgb(60 64 67 / 0.3), 0 1px 3px 1px rgb(60 64 67 / 0.15);
+  overflow-x: auto; scrollbar-width: none; white-space: nowrap;
+}
+.fx-toolbar::-webkit-scrollbar { display: none; }
+.fx-sep { flex: none; width: 1px; height: 20px; background: var(--fx-line); margin: 0 4px; }
+.fx-actions { display: flex; align-items: center; gap: 2px; padding: 10px 12px 12px; flex-wrap: wrap; }
+.fx-send { margin-inline-end: 8px; }
+.fx-color-trigger .fx-swatch { stroke: var(--fx-swatch); }
+
+/* Popovers and menus */
+.fx-menu { display: inline-flex; }
+.fx-pop {
+  z-index: 50; min-width: 160px; max-width: calc(100vw - 16px); padding: 6px 0; background: var(--fx-bg, #fff);
+  border-radius: 8px; box-shadow: 0 2px 6px 2px rgb(60 64 67 / 0.15), 0 1px 2px rgb(60 64 67 / 0.3); color: #202124;
+  font: 14px/1.5 Arial, Helvetica, sans-serif;
+}
+.fx-pop-title { font-size: 12px; color: #5f6368; margin: 0 0 6px; }
+.fx-menuitem { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 16px 6px 8px; border: 0; background: none; text-align: start; font: inherit; color: inherit; cursor: pointer; }
+.fx-menuitem:hover, .fx-menuitem:focus-visible { background: #f1f3f4; outline: none; }
+.fx-check { width: 16px; text-align: center; color: #0b57d0; }
+.fx-row { display: flex; gap: 2px; padding: 0 6px; }
+.fx-colors { display: flex; gap: 16px; padding: 6px 12px; }
+.fx-swatches { display: grid; grid-template-columns: repeat(8, 18px); gap: 3px; }
+.fx-swatch-btn { width: 18px; height: 18px; border: 1px solid rgb(0 0 0 / 0.12); border-radius: 2px; padding: 0; cursor: pointer; }
+.fx-swatch-btn[aria-pressed='true'] { outline: 2px solid #0b57d0; outline-offset: 1px; }
+
+/* Bubble and floating menus */
+.fx-bubble { display: flex; align-items: center; gap: 1px; padding: 2px 4px; background: #fff; border-radius: 8px; box-shadow: 0 2px 6px 2px rgb(60 64 67 / 0.15), 0 1px 2px rgb(60 64 67 / 0.3); z-index: 40; flex-wrap: wrap; max-width: min(520px, calc(100vw - 16px)); }
+.fx-link-bubble { padding: 4px 8px; }
+.fx-href { display: inline-flex; align-items: center; gap: 4px; max-width: 240px; color: #1a73e8; text-decoration: none; padding: 4px; }
+.fx-href span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-href svg { flex: none; width: 16px; height: 16px; }
+.fx-warn { flex-basis: 100%; color: #b06000; background: #fef7e0; border-radius: 4px; padding: 4px 8px; font-size: 12px; margin: 2px 0; }
+.fx-floating { z-index: 40; }
+.fx-plus { border: 1px solid var(--fx-line); border-radius: 50%; background: #fff; }
+.fx-insert { position: absolute; top: 36px; left: 0; }
+
+/* Link dialog */
+.fx-dialog { position: absolute; z-index: 60; top: 12px; left: 50%; transform: translateX(-50%); width: min(420px, calc(100% - 24px)); background: #fff; border-radius: 12px; padding: 16px 20px; box-shadow: 0 4px 8px 3px rgb(60 64 67 / 0.15), 0 1px 3px rgb(60 64 67 / 0.3); }
+.fx-dialog-title { font-size: 16px; font-weight: 500; margin: 0 0 12px; }
+.fx-field { display: grid; gap: 4px; font-size: 12px; color: #5f6368; margin-bottom: 10px; }
+.fx-field input { font: 14px Arial, sans-serif; padding: 8px 10px; border: 1px solid #dadce0; border-radius: 6px; color: #202124; }
+.fx-field input[aria-invalid='true'] { border-color: #c5221f; }
+.fx-error { color: #c5221f; font-size: 12px; min-height: 1em; }
+.fx-test-link { font-size: 12px; color: #1a73e8; }
+.fx-dialog-actions { display: flex; align-items: center; gap: 4px; margin-top: 12px; }
+
+/* Quoted original */
+.fx-quoted { padding: 0 16px 8px; }
+.fx-dots { min-width: 28px; height: 14px; border-radius: 7px; background: #e8eaed; font-size: 10px; letter-spacing: 1px; line-height: 1; }
+.fx-quoted blockquote { margin: 8px 0 0; margin-inline-start: 0.8ex; border-inline-start: 1px solid #ccc; padding-inline-start: 1ex; color: var(--fx-muted); }
+.fx-quoted-text { white-space: pre-wrap; }
+
+@media (max-width: 400px) {
+  .fx-colors { gap: 10px; padding: 6px 8px; }
+  .fx-swatches { grid-template-columns: repeat(8, 16px); gap: 3px; }
+  .fx-swatch-btn { width: 16px; height: 16px; }
+}
+@media (max-width: 600px) {
+  .fx-body { padding: 12px; }
+  .fx-toolbar { margin: 0 8px; }
+  .fx-actions { padding: 8px; }
+}

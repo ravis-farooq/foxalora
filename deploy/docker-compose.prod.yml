@@ -1,0 +1,59 @@
+# Production-style stack (draft, not yet built or run).
+# Start with:  ./deploy/install.sh mail.yourdomain.com
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./certs:/certs:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  app:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      SESSION_KEY: ${SESSION_KEY}
+      MAIL_SERVERS_FILE: /config/mail-servers.json
+      SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-30}
+      SESSION_MAX_HOURS: ${SESSION_MAX_HOURS:-12}
+    volumes:
+      - ./mail-servers.json:/config/mail-servers.json:ro
+    expose:
+      - "3000"
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+
+  # The services below are NOT used by prototype v0.1 (sessions are in memory, no database yet).
+  # They start with:  docker compose --profile phase1 up -d   once Phase 1 of CLAUDE.md is built.
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["phase1"]
+    environment:
+      POSTGRES_DB: foxalora
+      POSTGRES_USER: foxalora
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    profiles: ["phase1"]
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    restart: unless-stopped
+
+volumes:
+  pgdata:

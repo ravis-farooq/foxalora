@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+backend/mail-servers.json
+
+# Dev-only test certificates and keys
+dev/mailservers/certs/
+# Installer output: real mail-server mapping, TLS keys and secrets (D3)
+deploy/mail-servers.json
+deploy/certs/
+deploy/.env
+
+# OS and editor files
+.DS_Store
+*.log
+.vite/
+dev/.vault-key
