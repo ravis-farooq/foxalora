@@ -46,8 +46,10 @@ export const api = {
   get: (id: string) => call<MessageFull>('GET', `/messages/${encodeURIComponent(id)}`),
   flag: (id: string, f: { seen?: boolean; flagged?: boolean }) => call<void>('PATCH', `/messages/${encodeURIComponent(id)}`, f),
   remove: (id: string) => call<void>('DELETE', `/messages/${encodeURIComponent(id)}`),
-  send: (m: { to: string[]; cc?: string[]; bcc?: string[]; subject: string; text: string }) =>
-    call<{ status: string }>('POST', '/messages/send', m),
+  send: (m: {
+    to: string[]; cc?: string[]; bcc?: string[]; subject: string; text: string; html?: string;
+    inlineImages?: { contentId: string; filename: string; contentType: string; data: string }[];
+  }) => call<{ status: string }>('POST', '/messages/send', m),
   attachmentUrl: (id: string, part: string) =>
     `/api/v1/messages/${encodeURIComponent(id)}/attachments/${encodeURIComponent(part)}`,
 };

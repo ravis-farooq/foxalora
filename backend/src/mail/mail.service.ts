@@ -4,6 +4,8 @@ import type { Readable } from 'node:stream';
 import { safeFilename } from '../security/filename';
 import { sanitizeEmailHtml } from '../security/sanitize';
 import { MailboxCreds, openImap, withSmtp } from './connections';
+import { decodePart } from './decode-part';
+import { validateInlineImages } from './inline-images';
 import { MailError, normalizeMailError } from './mail-errors';
 import { assertFolder, decodeMessageId, encodeMessageId, type MessageRef } from './message-id';
 
@@ -23,6 +25,8 @@ interface PartInfo {
   size: number;
   inline: boolean;
   contentId: string | null;
+  encoding: string | undefined;
+  charset: string | undefined;
 }
 
 /** Splits a body structure into the displayable text/html parts and everything else. */
@@ -45,6 +49,8 @@ export function classifyParts(root: MessageStructureObject | undefined) {
       size: node.encoding === 'base64' && node.size ? Math.floor((node.size * 3) / 4) : node.size ?? 0,
       inline: node.disposition === 'inline',
       contentId: node.id ? node.id.replace(/^<|>$/g, '') : null,
+      encoding: node.encoding,
+      charset: node.parameters?.charset,
     };
     const bodyCandidate = node.disposition !== 'attachment' && !filename;
     if (bodyCandidate && type === 'text/plain' && !text) text = info;
@@ -57,7 +63,7 @@ export function classifyParts(root: MessageStructureObject | undefined) {
 
 const addr = (list?: MessageAddressObject[]) => (list ?? []).map((a) => ({ name: a.name ?? '', address: a.address ?? '' }));
 
-async function readCapped(stream: Readable, max: number): Promise<{ text: string; truncated: boolean }> {
+async function readCapped(stream: Readable, max: number, as: BufferEncoding = 'utf8'): Promise<{ text: string; truncated: boolean }> {
   const chunks: Buffer[] = [];
   let size = 0;
   let truncated = false;
@@ -72,7 +78,7 @@ async function readCapped(stream: Readable, max: number): Promise<{ text: string
     chunks.push(b);
     size += b.length;
   }
-  return { text: Buffer.concat(chunks).toString('utf8'), truncated };
+  return { text: Buffer.concat(chunks).toString(as), truncated };
 }
 
 /**
@@ -182,7 +188,12 @@ export class MailService {
       const read = async (p?: PartInfo) => {
         if (!p) return null;
         const d = await client.download(uid, p.part, { uid: true, maxBytes: MAX_TEXT_BYTES });
-        return d.content ? readCapped(d.content, MAX_TEXT_BYTES) : null;
+        if (!d.content) return null;
+        if ((d.meta.contentType ?? '').toLowerCase() === p.contentType) return readCapped(d.content, MAX_TEXT_BYTES);
+        // The server answered BODY[part.MIME] with headers of another part, so imapflow
+        // could not decode it: decode from BODYSTRUCTURE instead (seen on GreenMail).
+        const raw = await readCapped(d.content, MAX_TEXT_BYTES, 'latin1');
+        return { text: decodePart(Buffer.from(raw.text, 'latin1'), p.encoding, p.charset), truncated: raw.truncated };
       };
       const textBody = await read(text);
       const htmlBody = await read(html);
@@ -256,7 +267,7 @@ export class MailService {
 
   async send(
     c: MailboxCreds,
-    m: { to: string[]; cc?: string[]; bcc?: string[]; subject: string; text?: string; html?: string },
+    m: { to: string[]; cc?: string[]; bcc?: string[]; subject: string; text?: string; html?: string; inlineImages?: unknown },
   ) {
     if (!m || typeof m !== 'object') throw new BadRequestException('invalid message');
     const clean = (list?: unknown) => {
@@ -272,6 +283,10 @@ export class MailService {
       throw new BadRequestException('invalid subject'); // header-injection guard
     }
 
+    const html = typeof m.html === 'string' && m.html ? sanitizeEmailHtml(m.html) : undefined;
+    // Inline images from the editor (cid:), validated by sniffed type and size (rule 11).
+    const attachments = validateInlineImages(m.inlineImages, html ?? '');
+
     try {
       await withSmtp(c, (t) =>
         t.sendMail({
@@ -280,7 +295,8 @@ export class MailService {
           to, cc, bcc,
           subject: m.subject,
           text: typeof m.text === 'string' ? m.text : '',
-          html: typeof m.html === 'string' && m.html ? sanitizeEmailHtml(m.html) : undefined,
+          html,
+          attachments,
         }),
       );
     } catch (e) {

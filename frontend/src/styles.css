@@ -56,3 +56,24 @@ header { display: flex; align-items: center; gap: 12px; padding: 8px 16px; backg
   .layout:has(.row-item.active) .list { display: none; }
   .layout:has(.row-item.active) .reader { display: block; }
 }
+/* Compose window (Gmail-style). The editor inside keeps its own look (editor/composer/composer.css). */
+.compose-window { width: min(920px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: var(--panel); border-radius: 12px; box-shadow: 0 8px 24px rgb(0 0 0 / .25); padding: 0 12px 12px; }
+.compose-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; margin: 0 -12px 8px; padding: 8px 12px 8px 16px; background: #f2f6fc; border-radius: 12px 12px 0 0; }
+.compose-head h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.ghost.icon { border: 0; width: 32px; height: 32px; padding: 0; border-radius: 50%; }
+.ghost.icon:hover { background: rgb(0 0 0 / .06); }
+.compose-fields { margin: 0 4px 8px; }
+.compose-line { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.compose-line > span { color: var(--muted); min-width: 28px; }
+.compose-line input { border: 0; border-radius: 0; padding: 8px 0; background: transparent; }
+.compose-line input:focus-visible { outline: none; }
+.compose-line:focus-within { border-bottom-color: var(--accent); }
+button.link { border: 0; background: none; color: var(--muted); padding: 4px 6px; }
+button.link:hover { color: var(--text); text-decoration: underline; }
+.compose-error { margin: 0 4px 8px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 800px) {
+  .modal { padding: 0; }
+  .compose-window { width: 100%; height: 100%; max-height: none; border-radius: 0; }
+  .compose-head { border-radius: 0; }
+}

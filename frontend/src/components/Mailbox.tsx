@@ -39,11 +39,19 @@ export default function Mailbox({ email, onLogout }: { email: string; onLogout: 
   }
 
   function reply(m: MessageFull) {
-    const quoted = m.text.split('\n').map((l) => `> ${l}`).join('\n');
+    const from = m.from[0];
+    const who = from ? (from.name ? `${from.name} <${from.address}>` : from.address) : '';
+    const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     setCompose({
-      to: m.from[0]?.address ?? '',
+      title: 'Reply',
+      to: from?.address ?? '',
       subject: /^re:/i.test(m.subject) ? m.subject : `Re: ${m.subject}`,
-      body: `\n\nOn ${m.date ? new Date(m.date).toLocaleString() : ''}, ${m.from[0]?.address ?? ''} wrote:\n${quoted}`,
+      quoted: {
+        header: `On ${m.date ? new Date(m.date).toLocaleString() : ''}, ${who} wrote:`,
+        // m.html was sanitized by the server; plain-text messages are escaped here.
+        html: m.html ?? esc(m.text).replace(/\n/g, '<br>'),
+        text: m.text,
+      },
     });
   }
 

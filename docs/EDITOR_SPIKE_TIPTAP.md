@@ -119,7 +119,14 @@ Built on request: a Gmail-like toolbar, bubble and floating menus, fonts/colours
 
 **Still not done:** dark theme for the composer, a real table-size picker grid, emoji, attachments (non-image files, FOX-061/062), and screen-reader testing.
 
-## 9. Dependencies added (spike only)
+## 9. Moved into the app (2026-11-12)
+
+The editor is now the real composer: `frontend/src/editor/` (canonical copy; `spikes/` is kept as the record of the spike) with its 44 tests in `frontend/tests/editor/`. The compose window (`frontend/src/components/Compose.tsx`) adds To / Cc / Bcc / Subject above the unchanged editor, sends the editor's HTML and plain text, and replies carry the original as the separate quoted block.
+- **Inline images on send:** the backend now accepts them (`backend/src/mail/inline-images.ts`): max 10 images, 5 MB each, 10 MB total, PNG/JPEG/GIF/WebP checked by magic bytes against the declared type, only images referenced as `cid:` attached inline; the send route alone accepts 15 MB bodies. Verified end to end on GreenMail and Exim + Dovecot (multipart/related with Content-ID).
+- **Found while testing:** GreenMail answers `BODY[part.MIME]` for parts nested in multipart/related with the parent's headers, so the HTML part was not decoded. The backend now decodes from BODYSTRUCTURE when the server's answer does not match the requested part (`backend/src/mail/decode-part.ts`).
+- **Differences from the demo page:** the demo's sample signatures ("Sam Lee") are not shown because signatures are not stored yet (FOX-057/079); the signature button appears once a user has signatures. The writing area no longer shows a focus outline (matches Gmail and the screenshot used as reference).
+
+## 10. Dependencies added (spike only)
 
 All versions pinned, each published at least two weeks before 2026-11-12:
 `@tiptap/*` 3.32.1 including `@tiptap/extension-table` and `@tiptap/extensions`, `react`/`react-dom` 19.3.1 (61 runtime packages, all MIT, `npm audit` clean); dev: `vite` 8.3.5, `@vitejs/plugin-react` 6.1.2, `vitest` 4.1.12, `jsdom` 30.1.3, `typescript` 7.0.2, `@types/*`.

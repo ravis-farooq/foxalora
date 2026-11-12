@@ -58,7 +58,7 @@ export class MailController {
 
   @Post('messages/send')
   @HttpCode(202)
-  async send(@Req() req: AuthedRequest, @Body() body: { to: string[]; cc?: string[]; bcc?: string[]; subject: string; text?: string; html?: string }) {
+  async send(@Req() req: AuthedRequest, @Body() body: { to: string[]; cc?: string[]; bcc?: string[]; subject: string; text?: string; html?: string; inlineImages?: unknown }) {
     await this.mail.send(req.mailbox, body);
     return { status: 'sent' };
   }

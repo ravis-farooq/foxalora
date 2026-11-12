@@ -6,18 +6,18 @@ Date: 2026-11-12. Everything marked "verified" was run locally: backend `npm run
 
 | Criterion | Status |
 | --- | --- |
-| Cross-tenant test suite passes in CI | **Passes locally** with the same commands and service containers CI uses (`test/tenant-isolation.int.test.ts`, 13 tests). Not yet run on GitHub: the repository has no remote and no commits. |
-| SSRF test suite passes in CI | **Passes locally** (`test/security.test.ts`, `test/tls.test.ts`). Same caveat. |
-| No password reachable outside the vault (canary test) | **Passes locally** (`test/canary.e2e.test.ts`). Checked that it fails when a leak is planted. |
+| Cross-tenant test suite passes in CI | **Met.** First GitHub Actions run (2026-11-12, run 43196165982): all 5 jobs green, backend ran all 72 tests with PostgreSQL and Valkey service containers. |
+| SSRF test suite passes in CI | **Met** (same run). |
+| No password reachable outside the vault (canary test) | **Met** (same run). Checked that it fails when a leak is planted. |
 
-Phase 1 is therefore complete except for a first green CI run on GitHub, the connection pool (FOX-029) and structured JSON logs (FOX-119), listed below.
+Phase 1 exit criteria are met. Still open from the Phase 1 list: connection pool (FOX-029), structured JSON logs (FOX-119), secret value type (FOX-144), registry update/delete.
 
 ## Stories
 
 | Story | What was built | Status |
 | --- | --- | --- |
 | FOX-002 Repository, licence, contribution rules | `git init` (branch `main`), LICENSE, CONTRIBUTING (DCO sign-off), SECURITY.md, CODE_OF_CONDUCT.md | In review: security and conduct contacts are placeholders; branch protection needs a GitHub repository |
-| FOX-003 CI | `.github/workflows/ci.yml`: lint, typecheck, tests with PostgreSQL + Valkey, build, dependency audit (runtime ≥ moderate, dev ≥ high), gitleaks history scan, CodeQL; actions pinned to SHAs. Every job simulated locally from clean installs | In review: not run on GitHub yet |
+| FOX-003 CI | `.github/workflows/ci.yml`: lint, typecheck, tests with PostgreSQL + Valkey, build, dependency audit (runtime ≥ moderate, dev ≥ high), gitleaks history scan, CodeQL; actions pinned to SHAs | Done: green on GitHub |
 | FOX-009 Tenant model | `TenantDb.run()` is the only path to tenant data, sets `app.tenant_id`/`app.mailbox` per transaction, refuses missing/invalid tenants; tenant id comes from the session | Done (admin roles: Phase 3) |
 | FOX-010 Row-level security | RLS on all tenant tables; runtime role cannot bypass it; query without context returns nothing | Done, verified |
 | FOX-011 Schema, migrations, seed | Migration `0001_initial`, idempotent; least-privilege runtime role; `seed:dev` | Done, verified |
@@ -35,7 +35,7 @@ Phase 1 is therefore complete except for a first green CI run on GitHub, the con
 | D1 fetch policy | Opening a message downloads only text parts (≈2.6 KB IMAP traffic vs 4.3 MB before for a 3 MB attachment); attachments streamed per part | Done, verified |
 | FOX-076 Data isolation tests | Cross-mailbox and cross-tenant tests for contacts at database level | Done |
 | FOX-090 Canary test | Canary password through login, errors, logs, responses, Valkey and audit | Done, verified |
-| FOX-092 Security suites | SSRF, CSRF and cross-tenant tests automated | In review: needs a CI run |
+| FOX-092 Security suites | SSRF, CSRF and cross-tenant tests automated | Done: green on GitHub |
 | FOX-142 Fetch Metadata | Cross-site requests refused | Done |
 | FOX-143 Trusted proxy and hosts | `TRUST_PROXY` (default loopback + private networks), `ALLOWED_HOSTS` | Done |
 | FOX-029 Connection pool | — | **Not started** |

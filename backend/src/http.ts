@@ -33,7 +33,10 @@ export function configureApp(app: INestApplication) {
   app.use((req: Request, res: Response, next: NextFunction) =>
     req.headers['sec-fetch-site'] === 'cross-site' ? deny(res, 403, 'cross_site', 'Cross-site request refused.') : next());
 
-  app.use(json({ limit: '1mb' })); // request size limit
+  // Request size limits: sending may carry inline images (validated: 10 MB of images max);
+  // everything else stays small.
+  app.use('/api/v1/messages/send', json({ limit: '15mb' }));
+  app.use(json({ limit: '1mb' }));
   app.use(cookieParser());
 
   // Baseline security headers for API responses (PRD 5.6).
