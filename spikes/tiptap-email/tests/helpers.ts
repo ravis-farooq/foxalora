@@ -18,6 +18,12 @@ if (typeof (globalThis as any).ClipboardEvent === 'undefined') {
 }
 
 let n = 0;
+// Destroy every editor after each test, so ProseMirror's DOM-observer timers cannot
+// fire after the jsdom environment is torn down ("document is not defined").
+const created: Editor[] = [];
+afterEach(() => {
+  for (const e of created.splice(0)) e.destroy();
+});
 export function makeEditor(content: string | object = '', opts: EmailExtensionOptions = {}) {
   const images = new ImageStore(() => `blob:test/${++n}`);
   const editor = new Editor({
@@ -29,6 +35,7 @@ export function makeEditor(content: string | object = '', opts: EmailExtensionOp
         cleanPastedHtml(html, { registerImage: (d) => images.addDataUrl(d) }),
     },
   });
+  created.push(editor);
   return { editor, images };
 }
 
