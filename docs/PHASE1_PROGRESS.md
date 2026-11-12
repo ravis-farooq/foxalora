@@ -21,6 +21,7 @@ Phase 1 exit criteria are met. Still open from the Phase 1 list: connection pool
 | FOX-009 Tenant model | `TenantDb.run()` is the only path to tenant data, sets `app.tenant_id`/`app.mailbox` per transaction, refuses missing/invalid tenants; tenant id comes from the session | Done (admin roles: Phase 3) |
 | FOX-010 Row-level security | RLS on all tenant tables; runtime role cannot bypass it; query without context returns nothing | Done, verified |
 | FOX-011 Schema, migrations, seed | Migration `0001_initial`, idempotent; least-privilege runtime role; `seed:dev` | Done, verified |
+| FOX-004 Dev environment, seeded mailboxes | `dev/up.sh` starts Postfix + Dovecot (real TLS, test CA), PostgreSQL and Valkey, migrates, seeds the dev tenant and sample mail (`seed:mail`, idempotent), then the API and web app; `dev/down.sh`; works with or without the Compose plugin; GreenMail only for automated tests | Done, verified (from-scratch start 7 s with cached images; restart about 10 s) |
 | FOX-006 Mail server registry | Create, list, validation (standard ports per TLS mode, unencrypted refused in production), audit entries; per-protocol TLS (D23) | In progress: update and delete not built yet |
 | FOX-007 Domain mapping | Globally unique domains, mapping to another tenant's server impossible (composite foreign key), login only via mapping | Done, verified |
 | FOX-008 Generic failure | Same message and status class; failures padded to ≥ 1.2 s with jitter (measured 1.22 s vs 1.47 s) | Done, verified |
@@ -51,15 +52,9 @@ Phase 1 exit criteria are met. Still open from the Phase 1 list: connection pool
 ## How to run locally
 
 ```bash
-docker compose up -d postgres valkey greenmail      # or the docker run equivalents
-cd backend
-export DATABASE_OWNER_URL=postgres://foxalora:foxalora-dev-owner@127.0.0.1:55432/foxalora
-export DATABASE_URL=postgres://foxalora_app:foxalora-dev-app@127.0.0.1:55432/foxalora
-export VALKEY_URL=redis://:foxalora-dev-valkey@127.0.0.1:6379
-export FOXALORA_VAULT_KEYS=dev1:$(openssl rand -base64 32)
-npm run build && npm run migrate && npm run seed:dev
-npm run start:dev
+dev/up.sh                    # Postfix + Dovecot, PostgreSQL, Valkey, migrate, seed, API and web app
+dev/up.sh --services-only    # services and seed data only
 
-# tests (integration tests need the two URLs below)
-FOXALORA_TEST_PG_OWNER_URL=$DATABASE_OWNER_URL FOXALORA_TEST_VALKEY_URL=$VALKEY_URL npm test
+# tests (integration tests use the dev services)
+. dev/env.sh && cd backend && npm test
 ```

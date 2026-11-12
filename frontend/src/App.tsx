@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from './api';
 import Login from './components/Login';
-import Mailbox from './components/Mailbox';
+import Shell from './components/Shell';
+import { ToastProvider } from './ui/Toasts';
 
 export default function App() {
   const [email, setEmail] = useState<string | null>(null);
@@ -12,14 +13,19 @@ export default function App() {
   }, []);
 
   if (checking) return <div className="center muted">Loading…</div>;
-  if (!email) return <Login onLogin={setEmail} />;
   return (
-    <Mailbox
-      email={email}
-      onLogout={async () => {
-        await api.logout().catch(() => undefined);
-        setEmail(null);
-      }}
-    />
+    <ToastProvider>
+      {email ? (
+        <Shell
+          email={email}
+          onLogout={async () => {
+            await api.logout().catch(() => undefined);
+            setEmail(null);
+          }}
+        />
+      ) : (
+        <Login onLogin={setEmail} />
+      )}
+    </ToastProvider>
   );
 }

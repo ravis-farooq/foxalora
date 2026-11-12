@@ -112,6 +112,14 @@ describe('email HTML', () => {
     expect(out.html).toContain('On Mon, Alice &lt;alice@example.com&gt; wrote:</div><blockquote type="cite"');
     expect(out.text).toBe('Thanks\n\n-- \nSam Lee\nExample Hosting\n\nOn Mon, Alice <alice@example.com> wrote:\n> Original\n>\n> line 2\n');
   });
+
+  it('keeps the lines of a multi-line header (forwarded message) and escapes them', () => {
+    const out = serializeEmail(doc(p('FYI')), {
+      quoted: { header: '---------- Forwarded message ---------\nFrom: Dave <dave@x.test>\nSubject: <b>Hi</b>', html: '<p>Body</p>', text: 'Body' },
+    });
+    expect(out.html).toContain('---------- Forwarded message ---------<br>From: Dave &lt;dave@x.test&gt;<br>Subject: &lt;b&gt;Hi&lt;/b&gt;</div>');
+    expect(out.text).toContain('\n---------- Forwarded message ---------\nFrom: Dave <dave@x.test>\nSubject: <b>Hi</b>\n> Body\n');
+  });
 });
 
 describe('plain text', () => {

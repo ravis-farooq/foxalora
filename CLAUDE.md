@@ -37,9 +37,9 @@ If two documents disagree, the PRD wins on scope and the SAD wins on design. Rep
 
 `backend/` (NestJS 12) and `frontend/` (React 19 + Vite 8). **Phase 0 finished** (results: `docs/PROTOTYPE_RESULTS.md`). **Phase 1 exit criteria met** (`docs/PHASE1_PROGRESS.md`; CI green on GitHub): PostgreSQL 18 with row-level security and a least-privilege runtime role (Kysely + pg), database-backed mail server registry with separate IMAP/SMTP TLS and an operator CLI (`backend/src/cli.ts`), encrypted session vault and login throttling in Valkey, envelope encryption, opaque message ids with UIDVALIDITY checks, normalized mail errors, CI workflow, and 72 backend tests including cross-tenant, SSRF, TLS and canary suites. Open in Phase 1: connection pool (FOX-029), JSON logs (FOX-119), registry update/delete. Data-layer choices: `docs/DECISIONS.md` D-004. The Tiptap composer (D-003) is the app's editor in `frontend/src/editor/`, with inline images sent as validated `cid:` attachments; `spikes/tiptap-email/` is the original spike.
 
-What exists in draft form: direct login with IMAP and SMTP verification, encrypted in-memory session vault, admin-mapped mail servers, SSRF guard with IP pinning, folder list, paged message list, message read with server-side HTML sanitization, sandboxed iframe viewer, send, flags, delete, attachment download, simple React three-pane UI, GreenMail test server in `docker-compose.yml`.
+What exists in draft form: direct login with IMAP and SMTP verification, encrypted in-memory session vault, admin-mapped mail servers, SSRF guard with IP pinning, folder list, paged message list, message read with server-side HTML sanitization, sandboxed iframe viewer, send, flags, delete, attachment download, quick search (subject, sender, recipient), reply, reply all, forward, mark read/unread and star; contacts with search, recipient suggestions and vCard import/export; settings for display name (used in From), theme, density and time zone; rich-text signatures cleaned on save (`docs/DECISIONS.md` D-006, built ahead of Phase 2 at the product owner's request). Interface: icon rail, folder pane with role names and icons, paged list, labelled message toolbar, toasts, light and dark themes, phone layout with folder drawer and back button (plain CSS with tokens, `docs/DECISIONS.md` D-005). Development runs against Postfix + Dovecot with real TLS (`dev/up.sh`); GreenMail is kept for fast automated tests only.
 
-What does not exist: contacts, signatures, preferences, search, drafts, attachment upload, threading, IDLE, connection pooling, admin UI, installer, i18n/RTL, SSO, separate render origin, application Docker image, frontend tests.
+What does not exist: CSV contact import, frequently used addresses, language and other preferences beyond the four above, filtered or cross-folder search, drafts, attachment upload, threading, IDLE, connection pooling, admin UI, installer, i18n/RTL, SSO, separate render origin, application Docker image, frontend tests.
 
 ## 4. Non-negotiable rules
 
@@ -62,7 +62,7 @@ These come from the PRD security section and the SAD. Never break them to make s
 
 | Layer | Choice |
 | --- | --- |
-| Frontend | React + TypeScript, Vite. The PRD suggests Tailwind CSS; the prototype uses plain CSS. Decide when the UI epic starts and record it. |
+| Frontend | React + TypeScript, Vite. Plain CSS with design tokens and own SVG icons, not Tailwind (decided 2026-11-12, `docs/DECISIONS.md` D-005). |
 | Backend | Node.js 20+ and NestJS, modular monolith |
 | Mail libraries | `imapflow`, `nodemailer`, `mailparser` |
 | Sanitizer | `isomorphic-dompurify` (server) |
@@ -71,14 +71,14 @@ These come from the PRD security section and the SAD. Never break them to make s
 | Deploy | Docker Compose behind Nginx on Linux |
 
 ```bash
-docker compose up -d                       # GreenMail test mail server (IMAP 3143, SMTP 3025)
-cd backend && cp mail-servers.example.json mail-servers.json
-export SESSION_KEY=$(openssl rand -base64 32)
-npm install && npm run start:dev           # API on :3000/api/v1
-cd ../frontend && npm install && npm run dev   # UI on :5173
+dev/up.sh                       # Postfix + Dovecot (IMAP 993 TLS, SMTP 587 STARTTLS), PostgreSQL 55432, Valkey,
+                                # migrations, dev tenant, sample mail, API :3000/api/v1, UI :5173 (Ctrl+C stops)
+dev/up.sh --services-only       # services and seed data only
+. dev/env.sh                    # dev environment variables for manual commands and tests
+dev/down.sh                     # stop containers (--purge deletes dev data)
 ```
 
-Test users: `alice@example.com` / `alice123`, `bob@example.com` / `bob123`. If GreenMail rejects email-style logins, adjust the `-Dgreenmail.users...` options in `docker-compose.yml`.
+Test users: `carol@dovecot.test` / `carol-pass-1`, `dave@dovecot.test` / `dave-pass-1` (Postfix + Dovecot, default). `erin@exim.test` / `erin-pass-1` after `dev/mailservers/exim.sh`. GreenMail (`dev/up.sh --with-greenmail`): `alice@example.com` / `alice123`, for automated tests only. Do not use port 5432 for dev: a local PostgreSQL already runs there.
 
 ## 6. Architecture in brief
 
@@ -174,7 +174,8 @@ Any deviation from the PRD or SAD needs a short written note: justification, sec
 - One IMAP connection per request; slow on large mailboxes.
 - The viewer iframe is sandboxed with a CSP but served by the same origin as the app.
 - Sending does not yet attach files or save to Sent.
-- Mobile layout lacks a back button when a message is open.
+- Move between folders, bulk actions and drafts are not built yet; the interface shows only working features.
+- Inline (`cid:`) images in received mail are not displayed yet; they appear as attachments.
 
 ## 11. Definition of done (per story)
 

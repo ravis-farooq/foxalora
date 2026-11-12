@@ -104,3 +104,42 @@ Short records of project decisions, including deviations from the PRD or SAD (CL
 **Operational impact**
 - Paste cleanup for Word and Google Docs is our own code, and weaker out of the box than TinyMCE's paid PowerPaste. Test it with real clipboard samples.
 - Open risks the spike cannot fully settle on a Mac without those apps: Outlook desktop rendering, Android keyboards, iOS Safari. They need real-device and real-client checks before the composer ships.
+
+## D-005 Interface styling: plain CSS with design tokens, own icons
+
+- **Date:** 2026-11-12
+- **Decided by:** development, when the interface work started (CLAUDE.md section 5 asked for this decision then)
+- **Deviation:** the PRD suggests Tailwind CSS. The app keeps plain CSS.
+- **Decision:** One stylesheet (`frontend/src/styles.css`) with colour tokens on `:root`, a dark set under `prefers-color-scheme` and `[data-theme="dark"]`, and component classes. Icons are inline SVGs drawn for Foxalora (`frontend/src/ui/icons.tsx`), in the same style as the editor icons. No CSS framework or icon library is added.
+
+**Justification**
+- The composer (D-003) already uses plain CSS with its own tokens; one approach is simpler to maintain.
+- Hosting companies will brand the app (E12). Tokens are a small, documented surface for that, without a build step on their side.
+- No new dependencies (CLAUDE.md section 9), and the stylesheet stays small (5.6 KB gzipped for all of the app's CSS, editor included).
+
+**Security impact**
+- None for mail content. The light/dark choice is the only value kept in browser storage (`localStorage`, key `fx-theme`); the lint rule that bans browser storage is relaxed for those two lines only, with a comment. It moves to account preferences with FOX-077.
+
+**Operational impact**
+- Contributors write CSS rather than utility classes. Colours must come from tokens so both themes and later branding keep working.
+- The compose window stays light in dark mode, like the editor it contains, until the editor gets dark tokens.
+
+## D-006 Contacts, preferences and signatures ahead of Phase 2
+
+- **Date:** 2026-11-12
+- **Decided by:** product owner ("Yes, build them"), after the interface redesign
+- **Deviation:** CLAUDE.md section 7 puts contacts and settings in Phase 3, after the Phase 2 exit criteria. The product owner asked for them now. Phase 2 stories stay open (move, bulk actions, drafts, attachments upload, render origin).
+- **Decision:**
+  - Contacts (FOX-072), recipient suggestions from contacts (FOX-073, without frequently used addresses yet), vCard 2.1/3.0/4.0 import and 3.0 export (FOX-075). CSV import (FOX-074) is not built.
+  - Preferences hold only settings the app applies today: display name, theme (system, light, dark), list density and time zone. Language, date format, reply format, remote images and notifications are added with the features that use them.
+  - Signatures are stored as editor documents and cleaned on the server against an allowlist (nodes, marks, attribute values, link schemes http/https/mailto/tel). Images are not allowed in signatures until they can be stored safely.
+  - The display name is used in the From header; the address is always the session's. Names with `<`, `>` or `"` are refused so a name cannot pose as another address.
+  - Migration `0002`: address order for contacts, and at most one default signature per mailbox (unique partial index).
+
+**Security impact**
+- All three use the existing row-level-security path (`TenantDb`); tenant and mailbox come from the session only. An end-to-end test (`backend/test/contacts.e2e.test.ts`) checks that another mailbox or tenant cannot list, read, change, delete, suggest or export them, and that body fields such as `tenantId` are ignored.
+- Search text in contacts is matched literally (LIKE wildcards escaped). vCard imports are limited to 2 MB and 5,000 cards; an address book holds at most 10,000 contacts.
+
+**Operational impact**
+- Run `node dist/cli.js migrate` when updating (adds migration 0002).
+- The vCard import route accepts request bodies up to 3 MB; all other routes keep the 1 MB limit (sending keeps 15 MB).

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Starts the Exim + Dovecot test server on the standard ports (stops the Postfix+Dovecot
-# container first, since both use them). Test users: erin@exim.test / erin-pass-1,
+# container (foxalora-mailserver) first, since both use them). Test users: erin@exim.test / erin-pass-1,
 # frank@exim.test / frank-pass-1. IMAP 993 (TLS) / 143 (STARTTLS), SMTP 465 (TLS) / 587 (STARTTLS).
 set -euo pipefail
 cd "$(dirname "$0")"
 ./gen-test-ca.sh
-docker rm -f foxalora-dovecot foxalora-exim >/dev/null 2>&1 || true
+docker rm -f foxalora-mailserver foxalora-exim >/dev/null 2>&1 || true
 docker build -q -t foxalora/test-exim:dev exim >/dev/null
 docker run -d --name foxalora-exim --hostname mail.exim.test \
   -v "$PWD/certs:/certs:ro" \

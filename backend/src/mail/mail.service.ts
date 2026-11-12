@@ -8,10 +8,11 @@ import { decodePart } from './decode-part';
 import { validateInlineImages } from './inline-images';
 import { MailError, normalizeMailError } from './mail-errors';
 import { assertFolder, decodeMessageId, encodeMessageId, type MessageRef } from './message-id';
+import { MAX_SEARCH_RESULTS, searchCriteria } from './search';
+import { EMAIL_RE } from '../common/email';
 
 const MAX_PAGE_SIZE = 100;
 const MAX_RECIPIENTS = 100;
-const EMAIL_RE = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 // Fetch policy (CLAUDE.md rule 10, D1): only text parts are read when a message is
 // opened, each capped; attachments are streamed one part at a time, on request.
 const MAX_TEXT_BYTES = Number(process.env.MAIL_MAX_TEXT_BYTES ?? 2 * 1024 * 1024);
@@ -138,8 +139,9 @@ export class MailService {
     });
   }
 
-  async listMessages(c: MailboxCreds, folderRaw: string, page: number, pageSize: number) {
+  async listMessages(c: MailboxCreds, folderRaw: string, page: number, pageSize: number, query?: unknown) {
     const folder = assertFolder(folderRaw);
+    const criteria = searchCriteria(query);
     page = Math.max(1, Math.floor(page) || 1);
     pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Math.floor(pageSize) || 25));
 
@@ -149,15 +151,28 @@ export class MailService {
         const box = client.mailbox;
         if (!box) throw new NotFoundException();
         const uidValidity = String(box.uidValidity);
-        const total = box.exists;
-        const end = total - (page - 1) * pageSize;
-        if (end < 1) return { uidValidity, total, items: [] };
-        const start = Math.max(1, end - pageSize + 1);
+        let total = box.exists;
+        let range: string;
+        let byUid = false;
+        if (criteria) {
+          // Search runs on the server; newest first, capped so a broad search stays cheap.
+          const found = (await client.search(criteria, { uid: true })) || [];
+          const uids = found.sort((a, b) => b - a).slice(0, MAX_SEARCH_RESULTS);
+          total = uids.length;
+          const pageUids = uids.slice((page - 1) * pageSize, page * pageSize);
+          if (!pageUids.length) return { uidValidity, total, items: [] };
+          range = pageUids.join(',');
+          byUid = true;
+        } else {
+          const end = total - (page - 1) * pageSize;
+          if (end < 1) return { uidValidity, total, items: [] };
+          range = `${Math.max(1, end - pageSize + 1)}:${end}`;
+        }
 
         const items = [];
-        // Headers/envelope only; bodies are fetched when a message is opened. The
-        // sequence range only pages the list; every item is identified by UID.
-        for await (const m of client.fetch(`${start}:${end}`, { uid: true, envelope: true, flags: true, bodyStructure: true })) {
+        // Headers/envelope only; bodies are fetched when a message is opened. A sequence
+        // range only pages the plain list; every item is identified by UID.
+        for await (const m of client.fetch(range, { uid: true, envelope: true, flags: true, bodyStructure: true }, { uid: byUid })) {
           const from = m.envelope?.from?.[0];
           items.push({
             id: encodeMessageId(folder, box.uidValidity, m.uid),
@@ -268,6 +283,7 @@ export class MailService {
   async send(
     c: MailboxCreds,
     m: { to: string[]; cc?: string[]; bcc?: string[]; subject: string; text?: string; html?: string; inlineImages?: unknown },
+    fromName?: string,
   ) {
     if (!m || typeof m !== 'object') throw new BadRequestException('invalid message');
     const clean = (list?: unknown) => {
@@ -291,7 +307,8 @@ export class MailService {
       await withSmtp(c, (t) =>
         t.sendMail({
           // From is ALWAYS the authenticated mailbox: users cannot spoof other senders (prototype policy).
-          from: c.email,
+          // The name is validated in preferences (no control characters, no address look-alikes).
+          from: fromName ? { name: fromName, address: c.email } : c.email,
           to, cc, bcc,
           subject: m.subject,
           text: typeof m.text === 'string' ? m.text : '',

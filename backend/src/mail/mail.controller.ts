@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { AuthedRequest, AuthGuard } from '../auth/auth.guard';
+import { PreferencesService } from '../preferences/preferences.service';
 import { MailService } from './mail.service';
 
 /**
@@ -11,7 +12,10 @@ import { MailService } from './mail.service';
 @Controller()
 @UseGuards(AuthGuard)
 export class MailController {
-  constructor(private mail: MailService) {}
+  constructor(
+    private mail: MailService,
+    private prefs: PreferencesService,
+  ) {}
 
   @Get('mailboxes')
   folders(@Req() req: AuthedRequest) {
@@ -19,8 +23,8 @@ export class MailController {
   }
 
   @Get('messages')
-  list(@Req() req: AuthedRequest, @Query('folder') folder = 'INBOX', @Query('page') page = '1', @Query('pageSize') pageSize = '25') {
-    return this.mail.listMessages(req.mailbox, folder, Number(page), Number(pageSize));
+  list(@Req() req: AuthedRequest, @Query('folder') folder = 'INBOX', @Query('page') page = '1', @Query('pageSize') pageSize = '25', @Query('q') q?: unknown) {
+    return this.mail.listMessages(req.mailbox, folder, Number(page), Number(pageSize), q);
   }
 
   @Get('messages/:id')
@@ -59,7 +63,9 @@ export class MailController {
   @Post('messages/send')
   @HttpCode(202)
   async send(@Req() req: AuthedRequest, @Body() body: { to: string[]; cc?: string[]; bcc?: string[]; subject: string; text?: string; html?: string; inlineImages?: unknown }) {
-    await this.mail.send(req.mailbox, body);
+    // The sender name comes from the mailbox's own preferences; the address is always the session's.
+    const { displayName } = await this.prefs.get({ tenantId: req.mailbox.tenantId, email: req.mailbox.email });
+    await this.mail.send(req.mailbox, body, displayName || undefined);
     return { status: 'sent' };
   }
 }

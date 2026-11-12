@@ -151,7 +151,7 @@ export function EmailComposer(props: EmailComposerProps) {
           </button>
           {showQuoted && (
             <blockquote dir="auto">
-              <div>{props.quoted.header}</div>
+              <div style={{ whiteSpace: 'pre-line' }}>{props.quoted.header}</div>
               <div className="fx-quoted-text">{props.quoted.text}</div>
             </blockquote>
           )}

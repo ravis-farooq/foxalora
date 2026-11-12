@@ -5,6 +5,7 @@ import { requireEnv } from './common/tokens';
 import { createDb, migrateToLatest } from './database/database';
 import type { TlsPolicy } from './database/schema';
 import { TenantDb } from './database/tenant-db';
+import { openImap, withSmtp } from './mail/connections';
 import { RegistryService } from './registry/registry.service';
 import type { ServerInput } from './registry/server-validation';
 
@@ -18,7 +19,50 @@ const USAGE = `Usage: node dist/cli.js <command>
   domain:map <tenantId> <domain> <serverName>   map an email domain to a server (DATABASE_URL)
   server:list <tenantId>                    show a tenant's servers and domains (DATABASE_URL)
   seed:dev                                  development tenant for the local test servers (both URLs)
+  seed:mail [--force]                       sample messages for carol@ and dave@dovecot.test (DATABASE_URL,
+                                            NODE_EXTRA_CA_CERTS=dev/mailservers/certs/ca.pem); skipped if mail exists
 `;
+
+// Test accounts of the local Postfix + Dovecot server (dev/mailservers/postfix-accounts.cf).
+const DEV_MAILBOXES: Record<string, string> = { 'carol@dovecot.test': 'carol-pass-1', 'dave@dovecot.test': 'dave-pass-1' };
+// 1x1 PNG, used as an inline logo and an attachment in the samples.
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+
+function sampleMessages(): Array<{ from: string; to: string; subject: string; text: string; html?: string; attachments?: object[] }> {
+  const carol = 'carol@dovecot.test', dave = 'dave@dovecot.test';
+  return [
+    {
+      from: dave, to: carol, subject: 'Welcome to the Foxalora dev mailbox',
+      text: 'Hi Carol,\n\nThis mailbox is seeded for development.\n\n- Formatting\n- Tables\n- Attachments\n\nDave',
+      html: '<p>Hi Carol,</p><p>This mailbox is seeded for <b>development</b>. It shows:</p><ul><li><i>Formatting</i></li><li>Tables</li><li>Attachments</li></ul>' +
+        '<table border="1" cellpadding="6" style="border-collapse:collapse"><tr><th>Month</th><th>Visits</th></tr><tr><td>Oct</td><td>1200</td></tr><tr><td>Nov</td><td>1350</td></tr></table><p>Dave</p>',
+    },
+    {
+      from: dave, to: carol, subject: 'Quarterly report (attachments and an inline image)',
+      text: 'Report attached. The logo is an inline image.',
+      html: '<p><img src="cid:logo@seed.foxalora" alt="Logo" width="16" height="16"> Report attached.</p>',
+      attachments: [
+        { filename: 'logo.png', content: PNG, contentType: 'image/png', cid: 'logo@seed.foxalora' },
+        { filename: 'q3-report.pdf', content: Buffer.from('%PDF-1.4\n% Foxalora sample\n'), contentType: 'application/pdf' },
+        { filename: 'chart.png', content: PNG, contentType: 'image/png' },
+      ],
+    },
+    {
+      from: dave, to: carol, subject: 'Newsletter: remote images and a suspicious link',
+      text: 'This newsletter tries to load tracking images. Visit paypal.com (the link goes elsewhere).',
+      html: '<p>Tracking pixel below should be blocked:</p><img src="https://tracker.example/pixel.gif" width="1" height="1">' +
+        '<p style="background:url(https://tracker.example/bg.gif)">Styled background should be stripped.</p>' +
+        '<p>Visit <a href="https://evil.example/login">paypal.com</a> to confirm your account.</p>',
+    },
+    { from: dave, to: carol, subject: 'Plain text note', text: 'Lunch at 12:30?\n\nThis message has no HTML part.' },
+    {
+      from: dave, to: carol, subject: 'رسالة تجريبية باللغة العربية',
+      text: 'مرحباً كارول،\n\nهذه رسالة لاختبار الاتجاه من اليمين إلى اليسار.\n\nديف',
+      html: '<div dir="rtl"><p>مرحباً كارول،</p><p>هذه رسالة لاختبار <b>الاتجاه من اليمين إلى اليسار</b>.</p><p>ديف</p></div>',
+    },
+    { from: carol, to: dave, subject: 'Re: Lunch at 12:30?', text: 'Sounds good, see you then.\n\nCarol' },
+  ];
+}
 
 const out = (s: string) => process.stdout.write(`${s}\n`); // eslint-disable-line no-restricted-properties
 const ACTOR = `cli:${process.env.USER ?? 'operator'}`;
@@ -117,6 +161,32 @@ async function main(argv: string[]) {
       out(`development tenant ${tenantId} ready (example.com, dovecot.test, exim.test)`);
       return;
     }
+    case 'seed:mail': {
+      if (process.env.NODE_ENV === 'production') throw new Error('seed:mail is for development only');
+      const { db, reg } = registry();
+      const creds = async (email: string) => {
+        const server = await reg.resolveEmail(email);
+        if (!server) throw new Error(`${email} is not mapped; run seed:dev first`);
+        return { email, password: DEV_MAILBOXES[email], server };
+      };
+      // Only the mail adapter talks to mail servers (SSRF guard, TLS policy).
+      const carol = await creds('carol@dovecot.test');
+      const inbox = await openImap(carol);
+      const status = await inbox.status('INBOX', { messages: true });
+      const existing = status ? status.messages ?? 0 : 0;
+      await inbox.logout();
+      if (existing > 0 && !args.includes('--force')) {
+        out(`carol@dovecot.test already has ${existing} message(s); use --force to add the samples again`);
+        await db.destroy();
+        return;
+      }
+      for (const m of sampleMessages()) {
+        await withSmtp(await creds(m.from), (t) => t.sendMail(m));
+        out(`sent: ${m.subject}`);
+      }
+      await db.destroy();
+      return;
+    }
     default:
       out(USAGE);
       if (cmd && cmd !== 'help') process.exitCode = 2;
@@ -124,6 +194,6 @@ async function main(argv: string[]) {
 }
 
 main(process.argv.slice(2)).catch((e: Error) => {
-  process.stderr.write(`error: ${e.message}\n`); // eslint-disable-line no-restricted-properties
+  process.stderr.write(`error: ${e.message}\n`);
   process.exitCode = 1;
 });

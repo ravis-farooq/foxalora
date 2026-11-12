@@ -66,6 +66,7 @@ export interface ContactAddressesTable extends MailboxOwned {
   contact_id: string;
   email: string;
   label: ColumnType<string, string | undefined, string>;
+  position: ColumnType<number, number | undefined, number>;
 }
 
 export interface SystemSettingsTable {

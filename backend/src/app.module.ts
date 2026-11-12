@@ -7,11 +7,15 @@ import { AuthGuard } from './auth/auth.guard';
 import { LoginThrottleService } from './auth/login-throttle.service';
 import { VaultService } from './auth/vault.service';
 import { DB, requireEnv, VALKEY } from './common/tokens';
+import { ContactsController } from './contacts/contacts.controller';
+import { ContactsService } from './contacts/contacts.service';
 import { createDb } from './database/database';
 import type { Database } from './database/schema';
 import { TenantDb } from './database/tenant-db';
 import { MailController } from './mail/mail.controller';
 import { MailService } from './mail/mail.service';
+import { PreferencesController } from './preferences/preferences.controller';
+import { PreferencesService } from './preferences/preferences.service';
 import { RegistryService } from './registry/registry.service';
 
 /** Connects at start-up and fails fast if Valkey is unreachable, so the first request never races the connection. */
@@ -39,7 +43,7 @@ class Shutdown implements OnApplicationShutdown {
 }
 
 @Module({
-  controllers: [AuthController, MailController],
+  controllers: [AuthController, MailController, ContactsController, PreferencesController],
   providers: [
     // Runtime role (foxalora_app): always subject to row-level security.
     { provide: DB, useFactory: () => createDb(requireEnv('DATABASE_URL')) },
@@ -51,6 +55,8 @@ class Shutdown implements OnApplicationShutdown {
     LoginThrottleService,
     AuthGuard,
     MailService,
+    ContactsService,
+    PreferencesService,
     Shutdown,
   ],
 })

@@ -1,28 +1,51 @@
 # Local DEVELOPMENT services only. NOT for production (see deploy/).
-# GreenMail test mail server: IMAP localhost:3143, SMTP localhost:3025 (plaintext, dev only)
-# Test users (login = full email address):
-#   alice@example.com / alice123
-#   bob@example.com   / bob123
-# PostgreSQL localhost:55432 (not 5432, to avoid clashing with a local PostgreSQL) and Valkey (Redis-compatible) localhost:6379. Dev passwords
-# can be overridden with the environment variables shown.
+# Easiest start: dev/up.sh (works with or without the Docker Compose plugin).
+#
+# Default stack:
+#   mailserver  Postfix + Dovecot with real TLS (test CA from dev/mailservers/gen-test-ca.sh)
+#               IMAP 993 (TLS) / 143 (STARTTLS), SMTP 587 (STARTTLS) / 465 (TLS)
+#               carol@dovecot.test / carol-pass-1, dave@dovecot.test / dave-pass-1
+#   postgres    localhost:55432 (not 5432, to avoid clashing with a local PostgreSQL)
+#   valkey      localhost:6379 (Redis-compatible)
+# Optional (profiles):
+#   greenmail   --profile greenmail: plaintext IMAP 3143 / SMTP 3025, alice@example.com / alice123,
+#               bob@example.com / bob123. For quick automated tests only: no folders, no TLS.
+#   exim        --profile exim: Exim + Dovecot (cPanel-like); uses the same ports as mailserver,
+#               so stop mailserver first. erin@exim.test / erin-pass-1, frank@exim.test / frank-pass-1
+# Container and volume names are fixed so dev/up.sh can also start them with plain docker.
 services:
-  greenmail:
-    image: greenmail/standalone:2.1.2
-    ports:
-      - "3025:3025"
-      - "3143:3143"
+  mailserver:
+    image: mailserver/docker-mailserver:16.0.1
+    container_name: foxalora-mailserver
+    hostname: mail.dovecot.test
     environment:
-      GREENMAIL_OPTS: >-
-        -Dgreenmail.setup.test.smtp
-        -Dgreenmail.setup.test.imap
-        -Dgreenmail.hostname=0.0.0.0
-        -Dgreenmail.users=alice:alice123@example.com,bob:bob123@example.com
-        -Dgreenmail.users.login=email
-# Do NOT add -Dgreenmail.auth.disabled (with any value): GreenMail checks only that the
-# flag is present, and then accepts every password and creates unknown users on login.
+      SSL_TYPE: manual
+      SSL_CERT_PATH: /tmp/certs/fullchain.pem
+      SSL_KEY_PATH: /tmp/certs/server-key.pem
+      ENABLE_SPAMASSASSIN: '0'
+      ENABLE_CLAMAV: '0'
+      ENABLE_AMAVIS: '0'
+      ENABLE_FAIL2BAN: '0'
+      ENABLE_POSTGREY: '0'
+      ENABLE_OPENDKIM: '0'
+      ENABLE_OPENDMARC: '0'
+      ENABLE_POLICYD_SPF: '0'
+      ENABLE_RSPAMD: '0'
+      ENABLE_UPDATE_CHECK: '0'
+      LOG_LEVEL: warn
+    volumes:
+      - ./dev/mailservers/certs:/tmp/certs:ro
+      - ./dev/mailservers/postfix-accounts.cf:/tmp/docker-mailserver/postfix-accounts.cf:ro
+      - maildata-dev:/var/mail
+    ports:
+      - "143:143"
+      - "993:993"
+      - "587:587"
+      - "465:465"
 
   postgres:
     image: postgres:18.6-alpine
+    container_name: foxalora-postgres
     ports:
       - "127.0.0.1:${FOXALORA_PG_PORT:-55432}:5432"
     environment:
@@ -36,9 +59,44 @@ services:
 
   valkey:
     image: valkey/valkey:9.0.7-alpine
+    container_name: foxalora-valkey
     command: ["valkey-server", "--requirepass", "${FOXALORA_VALKEY_PASSWORD:-foxalora-dev-valkey}", "--save", "", "--appendonly", "no"]
     ports:
       - "127.0.0.1:${FOXALORA_VALKEY_PORT:-6379}:6379"
 
+  greenmail:
+    profiles: ["greenmail"]
+    image: greenmail/standalone:2.1.2
+    container_name: foxalora-greenmail
+    ports:
+      - "3025:3025"
+      - "3143:3143"
+    environment:
+      GREENMAIL_OPTS: >-
+        -Dgreenmail.setup.test.smtp
+        -Dgreenmail.setup.test.imap
+        -Dgreenmail.hostname=0.0.0.0
+        -Dgreenmail.users=alice:alice123@example.com,bob:bob123@example.com
+        -Dgreenmail.users.login=email
+# Do NOT add -Dgreenmail.auth.disabled (with any value): GreenMail checks only that the
+# flag is present, and then accepts every password and creates unknown users on login.
+
+  exim:
+    profiles: ["exim"]
+    build: ./dev/mailservers/exim
+    image: foxalora/test-exim:dev
+    container_name: foxalora-exim
+    hostname: mail.exim.test
+    volumes:
+      - ./dev/mailservers/certs:/certs:ro
+    ports:
+      - "143:143"
+      - "993:993"
+      - "587:587"
+      - "465:465"
+
 volumes:
   pgdata-dev:
+    name: foxalora-pgdata-dev
+  maildata-dev:
+    name: foxalora-maildata-dev

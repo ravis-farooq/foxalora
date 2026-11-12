@@ -11,28 +11,35 @@ admin-mapped mail servers, SSRF guard, encrypted session vault.**
 ## Quick start (Node 22, Docker)
 
 ```bash
-# 1. Dev services: PostgreSQL (port 55432), Valkey (6379), GreenMail test mail server
-docker compose up -d
-
-# 2. Backend
-cd backend
-cp .env.example .env            # then fill in the CHANGE_ME values, or export them
-npm install
-npm run build
-npm run migrate                 # schema owner connection (DATABASE_OWNER_URL)
-npm run seed:dev                # development tenant: example.com, dovecot.test, exim.test
-npm run start:dev               # http://localhost:3000/api/v1
-
-# 3. Frontend (new terminal)
-cd frontend
-npm install
-npm run dev                     # http://localhost:5173
+dev/up.sh
 ```
 
-Login with `alice@example.com` / `alice123` (GreenMail). Real-TLS test servers
-(Postfix + Dovecot, Exim + Dovecot) with a private test CA are in `dev/mailservers/`;
-start the API with `NODE_EXTRA_CA_CERTS=dev/mailservers/certs/ca.pem` so certificate
-verification stays on.
+One command starts everything for development and keeps it in the foreground (Ctrl+C stops
+the API and web app):
+
+- **Postfix + Dovecot** (docker-mailserver) with real TLS from a private test CA: IMAP 993,
+  SMTP 587 with STARTTLS. This is the setup most hosting companies run, so development uses it.
+- PostgreSQL 18 (port 55432) and Valkey (6379); migrations, the development tenant and
+  sample messages are applied automatically and only once.
+- API on http://localhost:3000/api/v1 and the web app on http://localhost:5173.
+
+Sign in as `carol@dovecot.test` / `carol-pass-1` or `dave@dovecot.test` / `dave-pass-1`.
+Carol's inbox has sample messages: formatting and a table, attachments with an inline image,
+a hostile newsletter (tracking pixel, CSS background, deceptive link), plain text and Arabic RTL.
+
+| Command | What it does |
+|---|---|
+| `dev/up.sh --services-only` | services and seed data only (run the API or tests yourself) |
+| `dev/up.sh --with-greenmail` | also start GreenMail (`alice@example.com` / `alice123`) |
+| `. dev/env.sh` | database, Valkey, vault key and test CA variables for manual commands and tests |
+| `dev/down.sh` | stop the containers, keep data; `--purge` also deletes the dev database and mailboxes |
+| `dev/mailservers/exim.sh` | swap in the Exim + Dovecot server (`erin@exim.test` / `erin-pass-1`) |
+| `node backend/dist/cli.js seed:mail --force` | add the sample messages again |
+
+GreenMail stays in `docker-compose.yml` (profile `greenmail`) for fast automated tests; it
+does not use TLS and behaves differently from production servers (`docs/PROTOTYPE_RESULTS.md`).
+The API trusts the test CA through `NODE_EXTRA_CA_CERTS`; certificate verification stays on.
+Ports 143, 993, 587 and 465 must be free on the machine.
 
 Mail servers and domains are managed with the operator CLI: `node dist/cli.js help`.
 Progress and test status: `docs/PROTOTYPE_RESULTS.md` (Phase 0), `docs/PHASE1_PROGRESS.md` (Phase 1).
@@ -55,12 +62,18 @@ Progress and test status: `docs/PROTOTYPE_RESULTS.md` (Phase 0), `docs/PHASE1_PR
 | Password never in DB/logs/localStorage/URL; encrypted vault | `auth/vault.service.ts`, canary test |
 | CSRF (SameSite=Strict + custom header) | `auth.guard.ts`, `frontend/src/api.ts` |
 | Attachment download, forced download, nosniff | `mail.controller.ts` |
-| Responsive 3-pane UI | `frontend/src/styles.css` |
+| Folder roles with names and icons, paged list, labelled toolbar, toasts | `frontend/src/components/Mailbox.tsx`, `frontend/src/mail/folders.ts` |
+| SRCH quick search (subject, sender, recipient) via IMAP SEARCH | `backend/src/mail/search.ts`, `mail.service.ts#listMessages` |
+| COMP reply, reply all (without own address), forward | `frontend/src/mail/format.ts`, `Mailbox.tsx` |
+| Light and dark themes, phone layout with drawer and back button | `frontend/src/styles.css`, `frontend/src/ui/theme.ts` |
+| CONT contacts: create, edit, delete, search, several addresses; vCard import and export; suggestions while typing recipients | `backend/src/contacts/`, `frontend/src/components/Contacts.tsx`, `RecipientInput.tsx` |
+| PREF display name (used in From), theme, density, time zone; reset | `backend/src/preferences/`, `frontend/src/components/Settings.tsx` |
+| Signatures: rich text, default per mailbox, cleaned on save | `backend/src/preferences/signature-content.ts`, `frontend/src/components/SignatureEditor.tsx` |
 
 ## Deliberately NOT in the prototype
 
-Contacts, signatures, preferences, search, drafts, attachments on send, threading,
-IMAP IDLE/connection pooling, admin UI,
+CSV contact import, frequently used addresses, filtered and cross-folder search, drafts,
+attachments on send, moving messages, bulk actions, threading, IMAP IDLE/connection pooling, admin UI,
 installer wizard, i18n/RTL, SSO adapters, separate-origin email rendering,
 Docker image for the app, most tests (only backend security unit tests exist).
 All are in the Development Backlog.
@@ -70,7 +83,7 @@ All are in the Development Backlog.
 1. One IMAP connection per request: slow on big mailboxes. Needs pooling.
 2. Email iframe uses `sandbox` + CSP but is same-origin parent. Move to a dedicated
    sandbox origin (PRD 5.4).
-3. Mobile: no "back to list" button when a message is open.
+3. Inline (`cid:`) images in received mail are shown as attachments, not in the body.
 4. Run `npm audit`, SAST and pen-test before real use (PRD 5.11).
 
 ## Licence

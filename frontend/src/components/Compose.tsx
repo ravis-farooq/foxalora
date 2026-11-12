@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
-import { EmailComposer } from '../editor/composer/EmailComposer';
+import { Icon } from '../ui/icons';
+import { EmailComposer, type Signature } from '../editor/composer/EmailComposer';
+import RecipientInput from './RecipientInput';
 import { DEFAULT_TOOLBAR, type ToolbarItem } from '../editor/composer/Toolbar';
 import { ImageStore } from '../editor/images';
 import type { EmailOutput, QuotedOriginal } from '../editor/serialize';
@@ -12,6 +14,8 @@ export interface ComposeInit {
   subject?: string;
   /** Original message for replies and forwards; kept apart from the typed text. */
   quoted?: QuotedOriginal;
+  /** Short notice shown above the editor (for example, attachments that are not forwarded). */
+  note?: string;
 }
 
 const split = (s: string) => s.split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean);
@@ -34,7 +38,13 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-export default function Compose({ init, onClose }: { init: ComposeInit; onClose: () => void }) {
+export default function Compose({ init, onClose, onSent, signatures, defaultSignatureId }: {
+  init: ComposeInit;
+  onClose: () => void;
+  onSent?: () => void;
+  signatures?: Record<string, Signature>;
+  defaultSignatureId?: string;
+}) {
   const [to, setTo] = useState(init.to ?? '');
   const [cc, setCc] = useState(init.cc ?? '');
   const [bcc, setBcc] = useState('');
@@ -81,6 +91,7 @@ export default function Compose({ init, onClose }: { init: ComposeInit; onClose:
         }),
       );
       await api.send({ to: recipients, cc: split(cc), bcc: split(bcc), subject, text: out.text, html: out.html, inlineImages });
+      onSent?.();
       onClose();
     } catch (e) {
       setErr((e as Error).message);
@@ -94,26 +105,26 @@ export default function Compose({ init, onClose }: { init: ComposeInit; onClose:
       <section className="compose-window" role="dialog" aria-modal="true" aria-labelledby="compose-title">
         <header className="compose-head">
           <h3 id="compose-title">{init.title ?? 'New message'}</h3>
-          <button type="button" className="ghost icon" aria-label="Close" title="Close" onClick={close}>✕</button>
+          <button type="button" className="ghost icon" aria-label="Close" title="Close" onClick={close}>{Icon.x}</button>
         </header>
 
         <div className="compose-fields">
           <label className="compose-line">
             <span>To</span>
-            <input value={to} onChange={(e) => setTo(e.target.value)} autoFocus={!init.to} inputMode="email" />
+            <RecipientInput label="To" value={to} onChange={setTo} autoFocus={!init.to} />
             {!showCc && <button type="button" className="link" onClick={() => setShowCc(true)}>Cc</button>}
             {!showBcc && <button type="button" className="link" onClick={() => setShowBcc(true)}>Bcc</button>}
           </label>
           {showCc && (
             <label className="compose-line">
               <span>Cc</span>
-              <input value={cc} onChange={(e) => setCc(e.target.value)} inputMode="email" />
+              <RecipientInput label="Cc" value={cc} onChange={setCc} />
             </label>
           )}
           {showBcc && (
             <label className="compose-line">
               <span>Bcc</span>
-              <input value={bcc} onChange={(e) => setBcc(e.target.value)} inputMode="email" />
+              <RecipientInput label="Bcc" value={bcc} onChange={setBcc} />
             </label>
           )}
           <label className="compose-line">
@@ -122,12 +133,15 @@ export default function Compose({ init, onClose }: { init: ComposeInit; onClose:
           </label>
         </div>
 
+        {init.note && <p className="compose-note">{Icon.info}<span>{init.note}</span></p>}
         {err && <div className="error compose-error" role="alert">{err}</div>}
 
         <EmailComposer
           quoted={init.quoted}
           images={images}
           toolbar={TOOLBAR}
+          signatures={signatures}
+          defaultSignatureId={defaultSignatureId}
           sending={sending}
           // Typed content only: the quoted original is not part of the editor document.
           onChange={(_out, json) => { typed.current = JSON.stringify(json).includes('"text"') || JSON.stringify(json).includes('"image"'); }}

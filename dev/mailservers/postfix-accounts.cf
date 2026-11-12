@@ -1,0 +1,2 @@
+carol@dovecot.test|{SHA512-CRYPT}$6$c3rfxCyedTP6H7q8$BrfTRcgXTGx/wDAR8.KQgcPquPgJ.Wz7upxtLq5UONMuoWdzFIusr01g5.WDWLZGPgnoYkrY3ZqLgXq7ARi5/1
+dave@dovecot.test|{SHA512-CRYPT}$6$wCB6cDutNm4yUHhB$o3VcDnc78DVuTV9Q7PdrZfbaQ7n1bkhS0qLF./o3e9RsRTFWSFXQiXpvP7g04RFqPByu2fZchNKBHCnEb0jZx0

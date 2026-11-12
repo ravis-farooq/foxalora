@@ -1,3 +1,5 @@
+import type { JSONContent } from '@tiptap/core';
+
 export interface Folder { path: string; name: string; specialUse: string | null; total: number; unseen: number }
 export interface Addr { name: string; address: string }
 export interface MessageSummary {
@@ -10,6 +12,16 @@ export interface MessageFull {
   text: string; html: string | null;
   attachments: { part: string; filename: string; size: number; contentType: string; inline: boolean }[];
 }
+
+export const PAGE_SIZE = 25;
+
+export interface ContactEmail { email: string; label: '' | 'work' | 'home' | 'other' | string }
+export interface ContactDraft { displayName: string; company: string; phone: string; emails: ContactEmail[] }
+export interface Contact extends ContactDraft { id: string }
+export interface Suggestion { name: string; email: string }
+export interface Preferences { displayName: string; theme: 'system' | 'light' | 'dark'; density: 'comfortable' | 'compact'; timeZone: string }
+export interface SignatureRecord { id: string; name: string; content: JSONContent; isDefault: boolean }
+export type SignatureDraft = Omit<SignatureRecord, 'id'>;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -41,7 +53,8 @@ export const api = {
   logout: () => call<void>('POST', '/auth/logout'),
   me: () => call<{ email: string }>('GET', '/auth/me'),
   folders: () => call<Folder[]>('GET', '/mailboxes'),
-  list: (folder: string, page: number) => call<MessageList>('GET', `/messages${q({ folder, page, pageSize: 25 })}`),
+  list: (folder: string, page: number, search = '') =>
+    call<MessageList>('GET', `/messages${q({ folder, page, pageSize: PAGE_SIZE, ...(search ? { q: search } : {}) })}`),
   // Message ids are opaque (folder + UIDVALIDITY + UID); a 409 folder_reset means reload the list.
   get: (id: string) => call<MessageFull>('GET', `/messages/${encodeURIComponent(id)}`),
   flag: (id: string, f: { seen?: boolean; flagged?: boolean }) => call<void>('PATCH', `/messages/${encodeURIComponent(id)}`, f),
@@ -50,6 +63,21 @@ export const api = {
     to: string[]; cc?: string[]; bcc?: string[]; subject: string; text: string; html?: string;
     inlineImages?: { contentId: string; filename: string; contentType: string; data: string }[];
   }) => call<{ status: string }>('POST', '/messages/send', m),
+  contacts: (search: string, page: number) => call<{ items: Contact[]; total: number }>('GET', `/contacts${q({ page, ...(search ? { q: search } : {}) })}`),
+  suggest: (text: string) => call<Suggestion[]>('GET', `/contacts/suggest${q({ q: text })}`),
+  createContact: (c: ContactDraft) => call<Contact>('POST', '/contacts', c),
+  updateContact: (id: string, c: ContactDraft) => call<Contact>('PUT', `/contacts/${encodeURIComponent(id)}`, c),
+  deleteContact: (id: string) => call<void>('DELETE', `/contacts/${encodeURIComponent(id)}`),
+  importContacts: (vcard: string, duplicates: 'skip' | 'add') =>
+    call<{ imported: number; skipped: number; errors: string[] }>('POST', '/contacts/import', { vcard, duplicates }),
+  exportContactsUrl: (ids?: string[]) => `/api/v1/contacts/export${ids?.length ? q({ ids: ids.join(',') }) : ''}`,
+  preferences: () => call<Preferences>('GET', '/preferences'),
+  savePreferences: (p: Partial<Preferences>) => call<Preferences>('PATCH', '/preferences', p),
+  resetPreferences: () => call<void>('DELETE', '/preferences'),
+  signatures: () => call<SignatureRecord[]>('GET', '/signatures'),
+  createSignature: (s: SignatureDraft) => call<SignatureRecord>('POST', '/signatures', s),
+  updateSignature: (id: string, s: SignatureDraft) => call<SignatureRecord>('PUT', `/signatures/${encodeURIComponent(id)}`, s),
+  deleteSignature: (id: string) => call<void>('DELETE', `/signatures/${encodeURIComponent(id)}`),
   attachmentUrl: (id: string, part: string) =>
     `/api/v1/messages/${encodeURIComponent(id)}/attachments/${encodeURIComponent(part)}`,
 };

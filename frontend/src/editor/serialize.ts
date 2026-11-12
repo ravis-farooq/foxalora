@@ -227,7 +227,7 @@ class Writer implements WriterApi {
   document(doc: JSONContent): string {
     const q = this.ctx.quoted;
     const quoted = q
-      ? `<div style="margin:12px 0 0 0">${esc(q.header)}</div>` +
+      ? `<div style="margin:12px 0 0 0">${esc(q.header).replace(/\n/g, '<br>')}</div>` +
         `<blockquote type="cite" style="margin:0 0 0 0.8ex;border-left:2px solid #cccccc;padding-left:1ex">${q.html}</blockquote>`
       : '';
     return (

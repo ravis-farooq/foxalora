@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "cli": "node dist/cli.js",
     "migrate": "node dist/cli.js migrate",
-    "seed:dev": "node dist/cli.js seed:dev"
+    "seed:dev": "node dist/cli.js seed:dev",
+    "seed:mail": "node dist/cli.js seed:mail"
   },
   "dependencies": {
     "@nestjs/common": "12.3.2",

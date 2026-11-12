@@ -1,119 +1,405 @@
-import { useCallback, useEffect, useState } from 'react';
-import { api, Folder, MessageFull, MessageSummary } from '../api';
-import Compose, { ComposeInit } from './Compose';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
+import { api, ApiError, Folder, MessageFull, MessageSummary, PAGE_SIZE } from '../api';
+import { folderIcon, folderLabel, sortFolders } from '../mail/folders';
+import { avatarOf, displayName, formatAddr, forwardSubject, fullDate, replyAllRecipients, replySubject, shortDate } from '../mail/format';
+import { Icon, Logo } from '../ui/icons';
+import { Menu } from '../ui/Menu';
+import { useToast } from '../ui/toast-context';
+import type { ComposeInit } from './Compose';
 import MessageView from './MessageView';
 
-export default function Mailbox({ email, onLogout }: { email: string; onLogout: () => void }) {
+interface ListState { items: MessageSummary[]; total: number }
+
+const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// m.html was sanitized by the server; plain-text messages are escaped here.
+const quotedHtml = (m: MessageFull) => m.html ?? esc(m.text).replace(/\n/g, '<br>');
+
+export default function Mailbox({ email, onCompose }: { email: string; onCompose: (init: ComposeInit) => void }) {
+  const toast = useToast();
   const [folders, setFolders] = useState<Folder[]>([]);
   const [folder, setFolder] = useState('INBOX');
-  const [items, setItems] = useState<MessageSummary[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState(''); // text in the box
+  const [query, setQuery] = useState(''); // search that produced the list
+  const [list, setList] = useState<ListState>({ items: [], total: 0 });
+  const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
-  const [compose, setCompose] = useState<ComposeInit | null>(null);
-  const [error, setError] = useState('');
+  const [msg, setMsg] = useState<MessageFull | null>(null);
+  const [msgError, setMsgError] = useState('');
+  const [drawer, setDrawer] = useState(false);
+  // Only the newest list or message request may update the screen.
+  const listSeq = useRef(0);
+  const openSeq = useRef(0);
 
-  const loadFolders = useCallback(() => api.folders().then(setFolders).catch((e) => setError(e.message)), []);
+  const current = folders.find((f) => f.path === folder);
+  const label = current ? folderLabel(current) : folder === 'INBOX' ? 'Inbox' : folder;
+  const summary = list.items.find((m) => m.id === selected);
 
-  const loadPage = useCallback(
-    async (f: string, p: number, replace: boolean) => {
-      try {
-        const r = await api.list(f, p);
-        setTotal(r.total);
-        setItems((prev) => (replace ? r.items : [...prev, ...r.items]));
-      } catch (e: any) {
-        setError(e.message);
-      }
+  const loadFolders = useCallback(() => {
+    api.folders().then(setFolders, (e: Error) => toast('error', e.message));
+  }, [toast]);
+
+  const loadList = useCallback(
+    (f: string, p: number, q: string) => {
+      const seq = ++listSeq.current;
+      setLoading(true);
+      setListError('');
+      api
+        .list(f, p, q)
+        .then((r) => seq === listSeq.current && setList({ items: r.items, total: r.total }))
+        .catch((e: Error) => seq === listSeq.current && setListError(e.message))
+        .finally(() => seq === listSeq.current && setLoading(false));
     },
     [],
   );
 
-  useEffect(() => { loadFolders(); }, [loadFolders]);
+  // First load only; later loads are started by the user's actions.
   useEffect(() => {
-    api.list('INBOX', 1).then((r) => { setTotal(r.total); setItems(r.items); }).catch((e) => setError(e.message));
-  }, []);
+    loadFolders();
+    const seq = ++listSeq.current;
+    api
+      .list('INBOX', 1)
+      .then((r) => seq === listSeq.current && setList({ items: r.items, total: r.total }))
+      .catch((e: Error) => seq === listSeq.current && setListError(e.message))
+      .finally(() => seq === listSeq.current && setLoading(false));
+  }, [loadFolders]);
 
-  function openFolder(f: string) {
-    setFolder(f); setItems([]); setPage(1); setSelected(null);
-    loadPage(f, 1, true);
+  // Phone layout: Escape closes the folder drawer.
+  useEffect(() => {
+    if (!drawer) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setDrawer(false);
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [drawer]);
+
+  const closeMessage = () => {
+    openSeq.current++;
+    setSelected(null);
+    setMsg(null);
+    setMsgError('');
+  };
+
+  function openFolder(path: string) {
+    setFolder(path);
+    setPage(1);
+    setSearch('');
+    setQuery('');
+    setDrawer(false);
+    closeMessage();
+    loadList(path, 1, '');
   }
 
-  function reply(m: MessageFull) {
-    const from = m.from[0];
-    const who = from ? (from.name ? `${from.name} <${from.address}>` : from.address) : '';
-    const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    setCompose({
-      title: 'Reply',
-      to: from?.address ?? '',
-      subject: /^re:/i.test(m.subject) ? m.subject : `Re: ${m.subject}`,
-      quoted: {
-        header: `On ${m.date ? new Date(m.date).toLocaleString() : ''}, ${who} wrote:`,
-        // m.html was sanitized by the server; plain-text messages are escaped here.
-        html: m.html ?? esc(m.text).replace(/\n/g, '<br>'),
-        text: m.text,
+  function goToPage(p: number) {
+    setPage(p);
+    loadList(folder, p, query);
+  }
+
+  function runSearch(e: FormEvent) {
+    e.preventDefault();
+    const q = search.trim();
+    setQuery(q);
+    setPage(1);
+    closeMessage();
+    loadList(folder, 1, q);
+  }
+
+  function clearSearch() {
+    setSearch('');
+    if (!query) return;
+    setQuery('');
+    setPage(1);
+    loadList(folder, 1, '');
+  }
+
+  function refresh() {
+    loadFolders();
+    loadList(folder, page, query);
+  }
+
+  const patchItem = (id: string, change: Partial<MessageSummary>) =>
+    setList((l) => ({ ...l, items: l.items.map((x) => (x.id === id ? { ...x, ...change } : x)) }));
+  const bumpUnseen = (delta: number) =>
+    setFolders((fs) => fs.map((f) => (f.path === folder ? { ...f, unseen: Math.max(0, f.unseen + delta) } : f)));
+
+  function openMessage(m: MessageSummary) {
+    const seq = ++openSeq.current;
+    setSelected(m.id);
+    setMsg(null);
+    setMsgError('');
+    api.get(m.id).then(
+      (full) => {
+        if (seq !== openSeq.current) return;
+        setMsg(full);
+        // The server marks a message read when its body is fetched.
+        if (!m.seen) {
+          patchItem(m.id, { seen: true });
+          bumpUnseen(-1);
+        }
       },
+      (e: Error) => {
+        if (seq !== openSeq.current) return;
+        if (e instanceof ApiError && e.status === 409) {
+          toast('info', 'This folder changed on the server. The list was reloaded.');
+          closeMessage();
+          loadList(folder, 1, query);
+        } else setMsgError(e.message);
+      },
+    );
+  }
+
+  function quote(m: MessageFull, header: string) {
+    return { header, html: quotedHtml(m), text: m.text };
+  }
+
+  function reply(all: boolean) {
+    if (!msg) return;
+    const from = msg.from[0];
+    const header = `On ${fullDate(msg.date)}, ${from ? formatAddr(from) : 'someone'} wrote:`;
+    const recipients = all ? replyAllRecipients(msg, email) : { to: from ? [from.address] : [], cc: [] };
+    onCompose({
+      title: all ? 'Reply all' : 'Reply',
+      to: recipients.to.join(', '),
+      cc: recipients.cc.join(', '),
+      subject: replySubject(msg.subject),
+      quoted: quote(msg, header),
     });
   }
 
+  function forward() {
+    if (!msg) return;
+    const header = [
+      '---------- Forwarded message ---------',
+      `From: ${msg.from.map(formatAddr).join(', ')}`,
+      `Date: ${fullDate(msg.date)}`,
+      `Subject: ${msg.subject}`,
+      `To: ${msg.to.map(formatAddr).join(', ')}`,
+      ...(msg.cc.length ? [`Cc: ${msg.cc.map(formatAddr).join(', ')}`] : []),
+    ].join('\n');
+    const files = msg.attachments.filter((a) => !a.inline).length;
+    onCompose({
+      title: 'Forward',
+      subject: forwardSubject(msg.subject),
+      quoted: quote(msg, header),
+      note: files ? `The original ${files === 1 ? 'attachment is' : `${files} attachments are`} not forwarded yet. Download and attach them once attachments are supported.` : undefined,
+    });
+  }
+
+  async function remove() {
+    if (!selected) return;
+    const id = selected;
+    const inTrash = current?.specialUse === '\\Trash';
+    if (inTrash && !window.confirm('Delete this message permanently? This cannot be undone.')) return;
+    try {
+      await api.remove(id);
+      setList((l) => ({ items: l.items.filter((x) => x.id !== id), total: Math.max(0, l.total - 1) }));
+      closeMessage();
+      loadFolders();
+      toast('success', inTrash ? 'Message deleted permanently.' : 'Message moved to Trash.');
+    } catch (e) {
+      toast('error', (e as Error).message);
+    }
+  }
+
+  async function mark(change: { seen?: boolean; flagged?: boolean }) {
+    if (!selected || !summary) return;
+    const id = selected;
+    const before = summary;
+    patchItem(id, change);
+    if (change.seen !== undefined && change.seen !== before.seen) bumpUnseen(change.seen ? -1 : 1);
+    try {
+      await api.flag(id, change);
+    } catch (e) {
+      patchItem(id, { seen: before.seen, flagged: before.flagged });
+      if (change.seen !== undefined && change.seen !== before.seen) bumpUnseen(change.seen ? 1 : -1);
+      toast('error', (e as Error).message);
+    }
+  }
+
+  const first = list.total ? (page - 1) * PAGE_SIZE + 1 : 0;
+  const last = Math.min(page * PAGE_SIZE, list.total);
+  const pages = Math.max(1, Math.ceil(list.total / PAGE_SIZE));
+  const sorted = sortFolders(folders);
+
   return (
-    <div className="app">
-      <header>
-        <strong>Foxalora Mail</strong>
-        <span className="grow" />
-        <span className="muted small">{email}</span>
-        <button className="ghost" onClick={onLogout}>Sign out</button>
-      </header>
-
-      <div className="layout">
-        <nav className="folders">
-          <button className="primary" onClick={() => setCompose({})}>Compose</button>
-          {folders.map((f) => (
-            <button key={f.path} className={f.path === folder ? 'folder active' : 'folder'} onClick={() => openFolder(f.path)}>
-              <span>{f.name}</span>
-              {f.unseen > 0 && <span className="badge">{f.unseen}</span>}
-            </button>
+    <div className={`mail-view ${drawer ? 'drawer-open' : ''} ${selected ? 'has-message' : ''}`}>
+      <aside className="folders" aria-label="Folders">
+        <div className="pane-head account">
+          <span className="avatar small" style={{ '--h': avatarOf({ name: '', address: email }).hue } as CSSProperties} aria-hidden="true">
+            {avatarOf({ name: '', address: email }).letter}
+          </span>
+          <span className="ellipsis" title={email}>{email}</span>
+          <button type="button" className="icon-btn only-mobile" aria-label="Close folders" onClick={() => setDrawer(false)}>{Icon.x}</button>
+        </div>
+        <ul className="folder-list">
+          {sorted.map((f) => (
+            <li key={f.path}>
+              <button
+                type="button"
+                className={`folder ${f.path === folder ? 'active' : ''} ${f.unseen > 0 ? 'has-unread' : ''}`}
+                aria-current={f.path === folder ? 'true' : undefined}
+                onClick={() => openFolder(f.path)}
+              >
+                {Icon[folderIcon(f)]}
+                <span className="folder-name ellipsis">{folderLabel(f)}</span>
+                {f.unseen > 0 && <span className="count" aria-label={`${f.unseen} unread`}>{f.unseen}</span>}
+              </button>
+            </li>
           ))}
-        </nav>
+        </ul>
+      </aside>
+      {drawer && <div className="scrim" onClick={() => setDrawer(false)} />}
 
-        <section className="list">
-          {error && <div className="error">{error}</div>}
-          {items.map((m) => (
-            <button
-              key={m.id}
-              className={`row-item ${m.seen ? '' : 'unread'} ${selected === m.id ? 'active' : ''}`}
-              onClick={() => {
-                setSelected(m.id);
-                setItems((p) => p.map((x) => (x.id === m.id ? { ...x, seen: true } : x)));
-              }}
-            >
-              <div className="from">{m.from.name || m.from.address} {m.hasAttachment && '📎'}</div>
-              <div className="subject">{m.subject}</div>
-              <div className="muted small">{m.date ? new Date(m.date).toLocaleString() : ''}</div>
-            </button>
-          ))}
-          {items.length < total && (
-            <button className="ghost" onClick={() => { const n = page + 1; setPage(n); loadPage(folder, n, false); }}>
-              Load more
-            </button>
-          )}
-          {!items.length && !error && <div className="muted pad">No messages</div>}
-        </section>
-
-        <section className="reader">
-          {selected ? (
-            <MessageView
-              key={selected}
-              id={selected}
-              onReply={reply}
-              onDeleted={() => { setItems((p) => p.filter((x) => x.id !== selected)); setSelected(null); loadFolders(); }}
+      <section className="list" aria-label={`${label} messages`}>
+        <div className="pane-head">
+          <button type="button" className="icon-btn only-mobile" aria-label="Show folders" onClick={() => setDrawer(true)}>{Icon.menu}</button>
+          <form role="search" className="search" onSubmit={runSearch}>
+            {Icon.search}
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={`Search ${label}`}
+              aria-label={`Search ${label}`}
+              maxLength={100}
             />
-          ) : (
-            <div className="pane muted">Select a message</div>
-          )}
-        </section>
-      </div>
+            {(search || query) && (
+              <button type="button" className="icon-btn" aria-label="Clear search" onClick={clearSearch}>{Icon.x}</button>
+            )}
+          </form>
+          <button type="button" className="icon-btn" aria-label="Refresh" title="Refresh" onClick={refresh}>{Icon.refresh}</button>
+        </div>
 
-      {compose && <Compose init={compose} onClose={() => setCompose(null)} />}
+        <div className="list-title">
+          <h1>{label}</h1>
+          <span className="muted small">
+            {query ? `${list.total} result${list.total === 1 ? '' : 's'} for “${query}”` : `${list.total} message${list.total === 1 ? '' : 's'}`}
+          </span>
+        </div>
+
+        <div className="list-body" aria-busy={loading}>
+          {listError && (
+            <div className="notice error" role="alert">
+              {Icon.alert}<span>{listError}</span>
+              <button type="button" className="link" onClick={refresh}>Try again</button>
+            </div>
+          )}
+          {loading && !list.items.length && !listError && <Skeleton />}
+          {list.items.length > 0 && (
+            <ul className="msg-list">
+              {list.items.map((m) => {
+                const av = avatarOf(m.from);
+                return (
+                  <li key={m.id}>
+                    <button
+                      type="button"
+                      className={`msg-row ${m.seen ? '' : 'unread'} ${selected === m.id ? 'active' : ''}`}
+                      aria-current={selected === m.id ? 'true' : undefined}
+                      onClick={() => openMessage(m)}
+                    >
+                      <span className="avatar" style={{ '--h': av.hue } as CSSProperties} aria-hidden="true">{av.letter}</span>
+                      <span className="msg-main">
+                        <span className="msg-line">
+                          <span className="msg-from ellipsis" dir="auto">{displayName(m.from)}</span>
+                          <time className="msg-date" dateTime={m.date ?? undefined}>{shortDate(m.date)}</time>
+                        </span>
+                        <span className="msg-line">
+                          <span className="msg-subject ellipsis" dir="auto">{m.subject}</span>
+                          <span className="msg-icons">
+                            {m.hasAttachment && <span title="Has attachments">{Icon.paperclip}</span>}
+                            {m.flagged && <span className="flagged" title="Starred">{Icon.star}</span>}
+                          </span>
+                        </span>
+                      </span>
+                      {!m.seen && <span className="sr-only">Unread</span>}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {!loading && !listError && !list.items.length && (
+            <div className="empty">
+              {query ? Icon.search : Icon.inbox}
+              <strong>{query ? 'No messages match your search' : 'The list is empty'}</strong>
+              {query && <button type="button" className="link" onClick={clearSearch}>Clear search</button>}
+            </div>
+          )}
+        </div>
+
+        <footer className="pager" aria-label="Pages">
+          <button type="button" className="icon-btn" aria-label="First page" disabled={page <= 1 || loading} onClick={() => goToPage(1)}>{Icon.chevronsLeft}</button>
+          <button type="button" className="icon-btn" aria-label="Previous page" disabled={page <= 1 || loading} onClick={() => goToPage(page - 1)}>{Icon.chevronLeft}</button>
+          <span>{list.total ? `${first}–${last} of ${list.total}` : 'No messages'}</span>
+          <button type="button" className="icon-btn" aria-label="Next page" disabled={page >= pages || loading} onClick={() => goToPage(page + 1)}>{Icon.chevronRight}</button>
+          <button type="button" className="icon-btn" aria-label="Last page" disabled={page >= pages || loading} onClick={() => goToPage(pages)}>{Icon.chevronsRight}</button>
+        </footer>
+      </section>
+
+      <section className="reader" aria-label="Message">
+        <div className="pane-head toolbar" role="toolbar" aria-label="Message actions">
+          <button type="button" className="icon-btn only-mobile" aria-label="Back to list" onClick={closeMessage}>{Icon.back}</button>
+          <ToolButton icon={Icon.reply} label="Reply" disabled={!msg} onClick={() => reply(false)} />
+          <ToolButton icon={Icon.replyAll} label="Reply all" disabled={!msg} onClick={() => reply(true)} />
+          <ToolButton icon={Icon.forward} label="Forward" disabled={!msg} onClick={forward} />
+          <span className="tool-sep" />
+          <ToolButton icon={Icon.trash} label="Delete" disabled={!selected} onClick={remove} />
+          <Menu
+            label="Mark"
+            icon={Icon.tag}
+            disabled={!summary}
+            items={[
+              summary?.seen
+                ? { label: 'Mark as unread', icon: Icon.mail, onSelect: () => mark({ seen: false }) }
+                : { label: 'Mark as read', icon: Icon.mailOpen, onSelect: () => mark({ seen: true }) },
+              summary?.flagged
+                ? { label: 'Remove star', icon: Icon.star, onSelect: () => mark({ flagged: false }) }
+                : { label: 'Add star', icon: Icon.star, onSelect: () => mark({ flagged: true }) },
+            ]}
+          />
+        </div>
+
+        <div className="reader-body">
+          {msgError ? (
+            <div className="notice error" role="alert">{Icon.alert}<span>{msgError}</span></div>
+          ) : msg && summary ? (
+            <MessageView msg={msg} flagged={summary.flagged} onToggleFlag={() => mark({ flagged: !summary.flagged })} />
+          ) : selected ? (
+            <div className="reader-empty"><span className="muted">Loading message…</span></div>
+          ) : (
+            <div className="reader-empty">
+              <Logo size={160} className="watermark" />
+              <span className="muted">Select a message to read it</span>
+            </div>
+          )}
+        </div>
+      </section>
+
     </div>
+  );
+}
+
+function ToolButton({ icon, label, disabled, onClick }: { icon: ReactNode; label: string; disabled?: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className="tool-btn" disabled={disabled} onClick={onClick} title={label}>
+      {icon}
+      <span className="tool-label">{label}</span>
+    </button>
+  );
+}
+
+function Skeleton() {
+  return (
+    <ul className="msg-list" aria-hidden="true">
+      {Array.from({ length: 6 }, (_, i) => (
+        <li key={i} className="msg-row skeleton-row">
+          <span className="avatar skeleton" />
+          <span className="msg-main">
+            <span className="skeleton" style={{ width: '45%' }} />
+            <span className="skeleton" style={{ width: '80%' }} />
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
