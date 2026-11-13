@@ -1,9 +1,18 @@
 import type { JSONContent } from '@tiptap/core';
 
-export interface Folder { path: string; name: string; specialUse: string | null; total: number; unseen: number }
+export interface Folder {
+  path: string; name: string; specialUse: string | null; total: number; unseen: number;
+  /** Hierarchy delimiter of the server ("/" or ".") and the parent's path ("" at the top). */
+  delimiter: string; parentPath: string;
+  /** False for container-only folders that hold subfolders but no messages. */
+  selectable: boolean;
+}
+export type BulkAction = 'seen' | 'unseen' | 'flag' | 'unflag' | 'move' | 'delete' | 'archive' | 'junk' | 'notjunk';
 export interface Addr { name: string; address: string }
 export interface MessageSummary {
   id: string; subject: string; from: Addr; date: string | null;
+  /** First recipient and how many there are (To + Cc), for the Sent and Drafts lists. */
+  to?: Addr; toCount?: number;
   seen: boolean; flagged: boolean; hasAttachment: boolean;
 }
 export interface MessageList { uidValidity: string; total: number; items: MessageSummary[] }
@@ -60,6 +69,13 @@ export const api = {
   logout: () => call<void>('POST', '/auth/logout'),
   me: () => call<{ email: string }>('GET', '/auth/me'),
   folders: () => call<Folder[]>('GET', '/mailboxes'),
+  createFolder: (name: string, parent?: string) => call<{ path: string }>('POST', '/mailboxes', { name, parent }),
+  renameFolder: (path: string, name: string) => call<{ path: string }>('PATCH', '/mailboxes', { path, name }),
+  deleteFolder: (path: string) => call<void>('DELETE', `/mailboxes${q({ path })}`),
+  quota: () => call<{ quota: { used: number; limit: number | null } | null }>('GET', '/mailboxes/quota'),
+  /** One action on up to 500 messages of one folder; moves return the new ids (for Undo). */
+  bulk: (ids: string[], action: BulkAction, target?: string) =>
+    call<{ newIds: string[]; target?: string; created?: boolean }>('POST', '/messages/bulk', { ids, action, target }),
   list: (folder: string, page: number, search = '') =>
     call<MessageList>('GET', `/messages${q({ folder, page, pageSize: PAGE_SIZE, ...(search ? { q: search } : {}) })}`),
   // Message ids are opaque (folder + UIDVALIDITY + UID); a 409 folder_reset means reload the list.
@@ -68,7 +84,9 @@ export const api = {
   /** Moves to Trash (trashId for Undo) or, in Trash, deletes for good (trashId null). */
   remove: (id: string) => call<{ trashId: string | null }>('DELETE', `/messages/${encodeURIComponent(id)}`),
   move: (id: string, folder: string) => call<{ id: string | null }>('POST', `/messages/${encodeURIComponent(id)}/move`, { folder }),
-  send: (m: OutgoingMessage & { draftId?: string }) => call<{ status: string }>('POST', '/messages/send', m),
+  /** sentCopy: saved to Sent, kept by the server itself, no Sent folder, or the copy failed (the message was still sent). */
+  send: (m: OutgoingMessage & { draftId?: string }) =>
+    call<{ status: string; sentCopy?: 'saved' | 'server' | 'no_folder' | 'failed' }>('POST', '/messages/send', m),
   saveDraft: (m: OutgoingMessage & { replaceId?: string }) => call<{ id: string }>('POST', '/drafts', m),
   deleteDraft: (id: string) => call<void>('DELETE', `/drafts/${encodeURIComponent(id)}`),
   clearRecent: () => call<void>('DELETE', '/contacts/recent'),

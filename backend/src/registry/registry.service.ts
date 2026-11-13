@@ -16,16 +16,19 @@ export interface MailServer {
   smtpPort: number;
   smtpTls: TlsPolicy;
   allowPrivate: boolean;
+  /** The server keeps its own copy of sent mail (OPEN-4). */
+  savesSent: boolean;
 }
 
 interface ServerRow {
   id: string; tenant_id: string; imap_host: string; imap_port: number; imap_tls: TlsPolicy;
-  smtp_host: string; smtp_port: number; smtp_tls: TlsPolicy; allow_private: boolean;
+  smtp_host: string; smtp_port: number; smtp_tls: TlsPolicy; allow_private: boolean; saves_sent?: boolean;
 }
 
 const toServer = (r: ServerRow): MailServer => ({
   id: r.id, tenantId: r.tenant_id, imapHost: r.imap_host, imapPort: r.imap_port, imapTls: r.imap_tls,
   smtpHost: r.smtp_host, smtpPort: r.smtp_port, smtpTls: r.smtp_tls, allowPrivate: r.allow_private,
+  savesSent: r.saves_sent === true, // not returned by the login lookup, which does not need it
 });
 
 const DOMAIN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -67,12 +70,21 @@ export class RegistryService {
     return this.tenantDb.run({ tenantId }, async (trx) => {
       const row = await trx.insertInto('mail_servers').values({
         tenant_id: tenantId, name: s.name, imap_host: s.imapHost, imap_port: s.imapPort, imap_tls: s.imapTls,
-        smtp_host: s.smtpHost, smtp_port: s.smtpPort, smtp_tls: s.smtpTls, allow_private: s.allowPrivate,
+        smtp_host: s.smtpHost, smtp_port: s.smtpPort, smtp_tls: s.smtpTls, allow_private: s.allowPrivate, saves_sent: s.savesSent === true,
       }).returningAll().executeTakeFirstOrThrow();
       await this.audit.insert(trx, tenantId, 'registry.server_created', actor, {
-        server: s.name, imap: `${s.imapHost}:${s.imapPort}/${s.imapTls}`, smtp: `${s.smtpHost}:${s.smtpPort}/${s.smtpTls}`, allowPrivate: s.allowPrivate,
+        server: s.name, imap: `${s.imapHost}:${s.imapPort}/${s.imapTls}`, smtp: `${s.smtpHost}:${s.smtpPort}/${s.smtpTls}`, allowPrivate: s.allowPrivate, savesSent: s.savesSent === true,
       });
       return toServer(row);
+    });
+  }
+
+  /** Marks whether a server keeps its own copy of sent mail (OPEN-4). */
+  async setSavesSent(tenantId: string, serverName: string, savesSent: boolean, actor: string): Promise<void> {
+    await this.tenantDb.run({ tenantId }, async (trx) => {
+      const r = await trx.updateTable('mail_servers').set({ saves_sent: savesSent, updated_at: new Date() }).where('name', '=', serverName).returning('id').executeTakeFirst();
+      if (!r) throw new ServerValidationError(`no server named "${serverName}" in this tenant`);
+      await this.audit.insert(trx, tenantId, 'registry.server_updated', actor, { server: serverName, savesSent });
     });
   }
 

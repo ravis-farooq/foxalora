@@ -23,6 +23,7 @@ export interface MailServersTable {
   smtp_port: number;
   smtp_tls: TlsPolicy;
   allow_private: boolean;
+  saves_sent: ColumnType<boolean, boolean | undefined, boolean>;
   created_at: CreatedAt;
   updated_at: UpdatedAt;
 }

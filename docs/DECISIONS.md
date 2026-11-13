@@ -192,3 +192,39 @@ Short records of project decisions, including deviations from the PRD or SAD (CL
 
 **Operational impact**
 - To test delivery to real mailboxes, map a real domain to a real mail server with the operator CLI (`server:add`, `domain:map`) on your own machine. Never commit those settings or credentials.
+
+## D-010 Folders, archive, junk, bulk actions and storage, simpler than Roundcube
+
+- **Date:** 2026-11-13
+- **Decided by:** product owner (Roundcube comparison: nested folders, Archive, Junk, Select, quota); details by development
+- **Decision:**
+  - **Folder tree** with subfolders (for example Inbox > Work), collapsible; New folder, New folder inside, Rename and Delete from a folder's ⋮ menu. The server's own hierarchy delimiter is used (Dovecot here uses "."). Folders with a role and the Inbox cannot be renamed or deleted; deleting a folder with subfolders is refused; deleting asks first and says how many messages go with it.
+  - **Archive** and **Junk / Not junk** buttons. If there is no Archive folder, the first Archive creates one and says so.
+  - **Move** menu (every other folder, indented like the sidebar) and **drag and drop** of one or several messages onto a folder; dropping on Trash counts as Delete (with its confirmation).
+  - **Selection:** the sender picture turns into a tick box on hover, keyboard focus or while selecting (tap it on phones); Select all on the page; Shift-click selects a range. A bulk bar offers read/unread, star, archive, junk, move, delete and restore (in Trash). One request handles up to 500 messages of one folder in a single IMAP connection (`POST /messages/bulk`), and moves return new ids so every move offers Undo.
+  - **Hover actions** on each row: archive, delete, read/unread (hidden on touch screens, where the bulk bar and toolbar do the same).
+  - **Storage** at the bottom of the folder list from IMAP QUOTA (FOX-137): "26 KB of 1 GB used", red above 90%; usage only when the server has no limit; hidden when the server does not report quota. Test accounts get a 1 GB quota (`dev/mailservers/dovecot-quotas.cf`).
+- **Not built: conversation threads (FOX-041, a Should).** The IMAP library has no THREAD command and threads across pages need their own design (server THREAD=REFERENCES where available, our own grouping by References/In-Reply-To otherwise). Planned as a separate story.
+
+**Security impact**
+- Folder names are validated on the server: no control characters, IMAP wildcards, "/" or the server delimiter, at most 100 characters, "INBOX" reserved, so a name cannot reach another part of the tree. Bulk ids must all decode to one folder and UIDVALIDITY; mixed or forged ids are refused.
+
+**Operational impact**
+- `dev/up.sh` recreates an older mail-server container to pick up the quota file (mail is kept).
+
+## D-011 Sent mail is saved by Foxalora through IMAP (OPEN-4 decided)
+
+- **Date:** 2026-11-13
+- **Decided by:** product owner ("Yes, build it"), after tests on the target servers
+- **Test results (2026-11-12):** after sending, the Sent folder stayed empty on Postfix + Dovecot and on Exim + Dovecot; GreenMail has no Sent folder. Ordinary mail servers only deliver; keeping a copy is the client's job (Roundcube, Thunderbird and Outlook do the same). Gmail and Microsoft 365 save sent mail themselves.
+- **Decision:**
+  - The message is built once (`buildSendMime`): sent over SMTP without the Bcc header, and the identical message (same Message-ID and Date) with Bcc kept is appended to the folder marked \Sent, flagged as read.
+  - Per mail server, the administrator can mark "the server saves sent mail itself" (`mail_servers.saves_sent`, migration 0004; CLI `server:add --saves-sent` or `server:saves-sent <tenant> <server> on|off`, audited). Then Foxalora adds no copy, so there are no duplicates (use it for Gmail).
+  - A failed copy never fails or repeats the send. The response says what happened (`sentCopy`: saved, server, no_folder, failed) and the user sees "Message sent, but a copy could not be saved in Sent" when the copy failed. A missing Sent folder is reported, not created.
+  - Sent and Drafts lists show the recipient ("To: dave@... +1") instead of the user's own name.
+
+**Security impact**
+- The copy is the message that was validated and sent; no new input is accepted. The Bcc list is only in the sender's own copy, never in what recipients receive (covered by a test).
+
+**Operational impact**
+- Run migrations (0004). When mapping Gmail or Microsoft 365, add `--saves-sent`.

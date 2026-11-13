@@ -7,7 +7,9 @@ import { MailboxCreds, openImap, withSmtp } from './connections';
 import { decodePart } from './decode-part';
 import { MailError, normalizeMailError } from './mail-errors';
 import { assertFolder, decodeMessageId, encodeMessageId, type MessageRef } from './message-id';
-import { buildDraftMime, parseOutgoing, type Outgoing, type OutgoingInput } from './outgoing';
+import { isProtectedFolder, parseBulk, validateFolderName } from './folder-ops';
+import { buildDraftMime, buildSendMime, parseOutgoing, type Outgoing, type OutgoingInput } from './outgoing';
+import { saveSentCopy, type SentCopy } from './sent-copy';
 import { MAX_SEARCH_RESULTS, searchCriteria } from './search';
 
 const MAX_PAGE_SIZE = 100;
@@ -146,11 +148,137 @@ export class MailService {
       return boxes.map((b) => ({
         path: b.path,
         name: b.name,
-        // Folder role from IMAP SPECIAL-USE attribute, not from the folder name (PRD Module 2)
+        // Folder role from IMAP SPECIAL-USE first; the library falls back to well-known names (PRD Module 2).
         specialUse: b.specialUse ?? (b.path.toUpperCase() === 'INBOX' ? '\\Inbox' : null),
+        delimiter: b.delimiter,
+        parentPath: b.parentPath,
+        // Container-only folders (\Noselect) hold subfolders but no messages.
+        selectable: !b.flags?.has('\\Noselect') && !b.flags?.has('\\NonExistent'),
         total: b.status?.messages ?? 0,
         unseen: b.status?.unseen ?? 0,
       }));
+    });
+  }
+
+  /** New folder, at the top level or inside another folder (FOX-038). */
+  async createFolder(c: MailboxCreds, nameRaw: unknown, parentRaw?: unknown): Promise<{ path: string }> {
+    return this.withImap(c, async (client) => {
+      const boxes = await client.list();
+      const delimiter = boxes[0]?.delimiter ?? '/';
+      const name = validateFolderName(nameRaw, delimiter);
+      let path = name;
+      if (parentRaw !== undefined && parentRaw !== null && parentRaw !== '') {
+        const parent = boxes.find((b) => b.path === assertFolder(parentRaw));
+        if (!parent) throw new MailError('folder_not_found', 404, 'Folder not found.');
+        if (parent.flags?.has('\\Noinferiors')) throw new BadRequestException('This folder cannot hold subfolders.');
+        path = `${parent.path}${parent.delimiter}${name}`;
+      }
+      if (boxes.some((b) => b.path.toLowerCase() === path.toLowerCase())) throw new BadRequestException('A folder with that name already exists here.');
+      await client.mailboxCreate(path);
+      await client.mailboxSubscribe(path).catch(() => undefined);
+      return { path };
+    });
+  }
+
+  /** Renames a folder in place (keeps its parent). Folders with a role cannot be renamed. */
+  async renameFolder(c: MailboxCreds, pathRaw: unknown, nameRaw: unknown): Promise<{ path: string }> {
+    const path = assertFolder(pathRaw);
+    return this.withImap(c, async (client) => {
+      const boxes = await client.list();
+      const box = boxes.find((b) => b.path === path);
+      if (!box) throw new MailError('folder_not_found', 404, 'Folder not found.');
+      if (isProtectedFolder(box)) throw new BadRequestException('This folder cannot be renamed.');
+      const name = validateFolderName(nameRaw, box.delimiter);
+      const newPath = box.parentPath ? `${box.parentPath}${box.delimiter}${name}` : name;
+      if (newPath === path) return { path };
+      if (boxes.some((b) => b.path.toLowerCase() === newPath.toLowerCase())) throw new BadRequestException('A folder with that name already exists here.');
+      await client.mailboxRename(path, newPath);
+      return { path: newPath };
+    });
+  }
+
+  /** Deletes a folder and the messages in it. Folders with a role or with subfolders are refused. */
+  async deleteFolder(c: MailboxCreds, pathRaw: unknown): Promise<void> {
+    const path = assertFolder(pathRaw);
+    await this.withImap(c, async (client) => {
+      const boxes = await client.list();
+      const box = boxes.find((b) => b.path === path);
+      if (!box) throw new MailError('folder_not_found', 404, 'Folder not found.');
+      if (isProtectedFolder(box)) throw new BadRequestException('This folder cannot be deleted.');
+      if (boxes.some((b) => b.parentPath === path)) throw new BadRequestException('Delete or move the folders inside it first.');
+      await client.mailboxDelete(path);
+    });
+  }
+
+  /**
+   * One action on up to 500 messages of one folder, in a single connection (FOX-037).
+   * Moves return the new ids so the client can offer Undo.
+   */
+  async bulk(c: MailboxCreds, body: unknown): Promise<{ newIds: string[]; target?: string; created?: boolean }> {
+    const req = parseBulk(body);
+    return this.withImap(c, async (client) => {
+      const boxes = await client.list();
+      const role = (use: string) => boxes.find((b) => b.specialUse === use);
+      let target: string | undefined;
+      let created = false;
+      if (req.action === 'move') {
+        if (!boxes.some((b) => b.path === req.target)) throw new MailError('folder_not_found', 404, 'Folder not found.');
+        target = req.target;
+      } else if (req.action === 'archive') {
+        target = role('\\Archive')?.path;
+        if (!target) {
+          // No Archive folder yet: create one, as Roundcube and Gmail-style clients do.
+          await client.mailboxCreate('Archive');
+          await client.mailboxSubscribe('Archive').catch(() => undefined);
+          target = 'Archive';
+          created = true;
+        }
+      } else if (req.action === 'junk') {
+        target = role('\\Junk')?.path;
+        if (!target) throw new MailError('folder_not_found', 404, 'There is no Junk folder on the mail server.');
+      } else if (req.action === 'notjunk') {
+        target = 'INBOX';
+      } else if (req.action === 'delete') {
+        const trash = role('\\Trash')?.path;
+        target = trash && trash !== req.folder ? trash : undefined; // in Trash (or none): delete for good
+      }
+
+      const lock = await client.getMailboxLock(req.folder);
+      try {
+        const current = client.mailbox ? BigInt(client.mailbox.uidValidity) : 0n;
+        if (current !== req.uidValidity) throw new MailError('folder_reset', 409, 'This folder was reset on the mail server. Reload the message list.');
+        const uids = req.uids.join(',');
+        const flag = async (name: string, on: boolean) =>
+          on ? client.messageFlagsAdd(uids, [name], { uid: true }) : client.messageFlagsRemove(uids, [name], { uid: true });
+        switch (req.action) {
+          case 'seen': await flag('\\Seen', true); return { newIds: [] };
+          case 'unseen': await flag('\\Seen', false); return { newIds: [] };
+          case 'flag': await flag('\\Flagged', true); return { newIds: [] };
+          case 'unflag': await flag('\\Flagged', false); return { newIds: [] };
+        }
+        if (!target) {
+          await client.messageDelete(uids, { uid: true });
+          return { newIds: [] };
+        }
+        if (target === req.folder) return { newIds: [], target };
+        const res = await client.messageMove(uids, target, { uid: true });
+        const newIds = res && res.uidValidity && res.uidMap
+          ? req.uids.map((u) => res.uidMap!.get(u)).filter((u): u is number => !!u).map((u) => encodeMessageId(target!, res.uidValidity!, u))
+          : [];
+        return { newIds, target, ...(created ? { created } : {}) };
+      } finally {
+        lock.release();
+      }
+    });
+  }
+
+  /** Storage used and allowed (FOX-137); null when the server does not report a quota. */
+  async quota(c: MailboxCreds): Promise<{ quota: { used: number; limit: number | null } | null }> {
+    return this.withImap(c, async (client) => {
+      if (!client.capabilities.has('QUOTA')) return { quota: null };
+      const q = await client.getQuota('INBOX').catch(() => false as const);
+      if (!q || !q.storage || typeof q.storage.usage !== 'number') return { quota: null };
+      return { quota: { used: q.storage.usage, limit: typeof q.storage.limit === 'number' && q.storage.limit > 0 ? q.storage.limit : null } };
     });
   }
 
@@ -189,10 +317,14 @@ export class MailService {
         // range only pages the plain list; every item is identified by UID.
         for await (const m of client.fetch(range, { uid: true, envelope: true, flags: true, bodyStructure: true }, { uid: byUid })) {
           const from = m.envelope?.from?.[0];
+          const to = m.envelope?.to?.[0];
           items.push({
             id: encodeMessageId(folder, box.uidValidity, m.uid),
             subject: m.envelope?.subject ?? '(no subject)',
             from: { name: from?.name ?? '', address: from?.address ?? '' },
+            // First recipient: Sent and Drafts show who a message is for.
+            to: { name: to?.name ?? '', address: to?.address ?? '' },
+            toCount: (m.envelope?.to?.length ?? 0) + (m.envelope?.cc?.length ?? 0),
             date: m.envelope?.date ?? null,
             seen: m.flags?.has('\\Seen') ?? false,
             flagged: m.flags?.has('\\Flagged') ?? false,
@@ -298,27 +430,26 @@ export class MailService {
     });
   }
 
-  async send(c: MailboxCreds, m: OutgoingInput, fromName?: string): Promise<Outgoing> {
+  /**
+   * Sends a message, then keeps a copy in the Sent folder (OPEN-4) unless the server does
+   * that itself. The copy is the same message (same Message-ID and Date) with Bcc kept.
+   * A failed copy never fails or repeats the send; `sentCopy` tells the client what happened.
+   */
+  async send(c: MailboxCreds, m: OutgoingInput, fromName?: string): Promise<Outgoing & { sentCopy: SentCopy }> {
     const out = parseOutgoing(m, 'send');
+    const mime = await buildSendMime(c.email, fromName, out);
     try {
-      await withSmtp(c, (t) =>
-        t.sendMail({
-          // From is ALWAYS the authenticated mailbox: users cannot spoof other senders (prototype policy).
-          // The name is validated in preferences (no control characters, no address look-alikes).
-          from: fromName ? { name: fromName, address: c.email } : c.email,
-          to: out.to, cc: out.cc, bcc: out.bcc,
-          subject: out.subject,
-          text: out.text,
-          html: out.html,
-          attachments: out.attachments,
-          disableFileAccess: true,
-          disableUrlAccess: true,
-        }),
-      );
+      // From is ALWAYS the authenticated mailbox: users cannot spoof other senders (prototype policy).
+      // The name is validated in preferences (no control characters, no address look-alikes).
+      await withSmtp(c, (t) => t.sendMail({ envelope: mime.envelope, raw: mime.smtpRaw }));
     } catch (e) {
       throw normalizeMailError(e);
     }
-    return out;
+    let sentCopy: SentCopy = 'server';
+    if (!c.server.savesSent) {
+      sentCopy = await this.withImap(c, (client) => saveSentCopy(client, mime.copyRaw)).catch((): SentCopy => 'failed');
+    }
+    return { ...out, sentCopy };
   }
 
   private async specialFolder(client: ImapFlow, use: string): Promise<string> {

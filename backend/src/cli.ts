@@ -14,8 +14,10 @@ const USAGE = `Usage: node dist/cli.js <command>
   migrate                                   run database migrations (DATABASE_OWNER_URL)
   tenant:create <name>                      create a tenant, print its id (DATABASE_OWNER_URL)
   tenant:list                               list tenants (DATABASE_OWNER_URL)
-  server:add <tenantId> <name> --imap host:port:tls --smtp host:port:tls [--allow-private]
+  server:add <tenantId> <name> --imap host:port:tls --smtp host:port:tls [--allow-private] [--saves-sent]
                                             tls is one of tls | starttls | none-dev-only (DATABASE_URL)
+                                            --saves-sent: the server keeps its own copy of sent mail (Gmail)
+  server:saves-sent <tenantId> <name> on|off  whether the server keeps its own copy of sent mail (DATABASE_URL)
   domain:map <tenantId> <domain> <serverName>   map an email domain to a server (DATABASE_URL)
   server:list <tenantId>                    show a tenant's servers and domains (DATABASE_URL)
   seed:dev                                  development tenant for the local test servers (both URLs)
@@ -115,9 +117,18 @@ async function main(argv: string[]) {
       const [imapHost, imapPort, imapTls] = endpoint(flag('--imap'), '--imap');
       const [smtpHost, smtpPort, smtpTls] = endpoint(flag('--smtp'), '--smtp');
       const { db, reg } = registry();
-      const s = await reg.createServer(tenantId, { name, imapHost, imapPort, imapTls, smtpHost, smtpPort, smtpTls, allowPrivate: args.includes('--allow-private') }, ACTOR);
+      const s = await reg.createServer(tenantId, { name, imapHost, imapPort, imapTls, smtpHost, smtpPort, smtpTls, allowPrivate: args.includes('--allow-private'), savesSent: args.includes('--saves-sent') }, ACTOR);
       await db.destroy();
       out(s.id);
+      return;
+    }
+    case 'server:saves-sent': {
+      const [tenantId, name, value] = args;
+      if (value !== 'on' && value !== 'off') throw new Error('use on or off');
+      const { db, reg } = registry();
+      await reg.setSavesSent(tenantId, name, value === 'on', ACTOR);
+      await db.destroy();
+      out(`${name}: ${value === 'on' ? 'the server keeps sent mail itself; Foxalora adds no copy' : 'Foxalora saves a copy of sent mail to Sent'}`);
       return;
     }
     case 'domain:map': {
@@ -132,7 +143,7 @@ async function main(argv: string[]) {
       const { db, reg } = registry();
       const { servers, domains } = await reg.listServers(args[0]);
       for (const s of servers) {
-        out(`${s.name}: IMAP ${s.imap_host}:${s.imap_port}/${s.imap_tls}, SMTP ${s.smtp_host}:${s.smtp_port}/${s.smtp_tls}${s.allow_private ? ', private allowed' : ''}`);
+        out(`${s.name}: IMAP ${s.imap_host}:${s.imap_port}/${s.imap_tls}, SMTP ${s.smtp_host}:${s.smtp_port}/${s.smtp_tls}${s.allow_private ? ', private allowed' : ''}${s.saves_sent ? ', saves sent mail itself' : ''}`);
         for (const d of domains.filter((x) => x.mail_server_id === s.id)) out(`    ${d.domain}`);
       }
       await db.destroy();

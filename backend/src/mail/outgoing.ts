@@ -43,10 +43,7 @@ export function parseOutgoing(m: OutgoingInput, mode: 'send' | 'draft'): Outgoin
   return { to, cc, bcc, subject, text: typeof m.text === 'string' ? m.text : '', html, attachments };
 }
 
-/** MIME source of a draft, for IMAP APPEND to the Drafts folder. Never reads files or URLs. */
-export async function buildDraftMime(address: string, name: string | undefined, d: Outgoing): Promise<{ raw: Buffer; messageId: string }> {
-  const domain = address.split('@')[1] ?? 'localhost';
-  const messageId = `<draft.${randomBytes(12).toString('hex')}@${domain}>`;
+function compose(address: string, name: string | undefined, d: Outgoing, messageId: string, date: Date, keepBcc: boolean): Promise<Buffer> {
   const node = new MailComposer({
     from: name ? { name, address } : address,
     to: d.to, cc: d.cc, bcc: d.bcc,
@@ -55,10 +52,30 @@ export async function buildDraftMime(address: string, name: string | undefined, 
     html: d.html,
     attachments: d.attachments,
     messageId,
-    date: new Date(),
+    date,
+    // Content comes only from validated input; never from local files or URLs.
     disableFileAccess: true,
     disableUrlAccess: true,
   }).compile();
-  node.keepBcc = true; // a draft keeps Bcc so it can be sent later
-  return { raw: await node.build(), messageId };
+  node.keepBcc = keepBcc;
+  return node.build();
+}
+
+const newMessageId = (address: string, kind: string) => `<${kind}.${randomBytes(12).toString('hex')}@${address.split('@')[1] ?? 'localhost'}>`;
+
+/** MIME source of a draft, for IMAP APPEND to the Drafts folder. A draft keeps Bcc so it can be sent later. */
+export async function buildDraftMime(address: string, name: string | undefined, d: Outgoing): Promise<{ raw: Buffer; messageId: string }> {
+  const messageId = newMessageId(address, 'draft');
+  return { raw: await compose(address, name, d, messageId, new Date(), true), messageId };
+}
+
+/**
+ * One message, built twice with the same Message-ID and Date (OPEN-4): `smtpRaw` without
+ * the Bcc header for sending, `copyRaw` with it for the sender's Sent folder.
+ */
+export async function buildSendMime(address: string, name: string | undefined, d: Outgoing) {
+  const messageId = newMessageId(address, 'fx');
+  const date = new Date();
+  const [smtpRaw, copyRaw] = await Promise.all([compose(address, name, d, messageId, date, false), compose(address, name, d, messageId, date, true)]);
+  return { smtpRaw, copyRaw, messageId, envelope: { from: address, to: [...d.to, ...d.cc, ...d.bcc] } };
 }

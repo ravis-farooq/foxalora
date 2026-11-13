@@ -8,7 +8,12 @@ const ok: ServerInput = {
 
 describe('mail server validation (FOX-006)', () => {
   it('accepts the common real setup: IMAP 993 TLS with SMTP 587 STARTTLS (D23)', () => {
-    expect(validateServerInput(ok, { production: true })).toEqual({ ...ok });
+    expect(validateServerInput(ok, { production: true })).toEqual({ ...ok, savesSent: false });
+  });
+
+  it('keeps the "server saves sent mail itself" setting only when it is exactly true (OPEN-4)', () => {
+    expect(validateServerInput({ ...ok, savesSent: true }, { production: true }).savesSent).toBe(true);
+    expect(validateServerInput({ ...ok, savesSent: 'yes' as never }, { production: true }).savesSent).toBe(false);
   });
 
   it('accepts the other standard port and TLS pairs', () => {

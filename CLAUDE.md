@@ -38,7 +38,7 @@ If two documents disagree, the PRD wins on scope and the SAD wins on design. Rep
 
 `backend/` (NestJS 12) and `frontend/` (React 19 + Vite 8). **Phase 0 finished** (results: `docs/PROTOTYPE_RESULTS.md`). **Phase 1 exit criteria met** (`docs/PHASE1_PROGRESS.md`; CI green on GitHub): PostgreSQL 18 with row-level security and a least-privilege runtime role (Kysely + pg), database-backed mail server registry with separate IMAP/SMTP TLS and an operator CLI (`backend/src/cli.ts`), encrypted session vault and login throttling in Valkey, envelope encryption, opaque message ids with UIDVALIDITY checks, normalized mail errors, CI workflow, and 72 backend tests including cross-tenant, SSRF, TLS and canary suites. Open in Phase 1: connection pool (FOX-029), JSON logs (FOX-119), registry update/delete. Data-layer choices: `docs/DECISIONS.md` D-004. The Tiptap composer (D-003) is the app's editor in `frontend/src/editor/`, with inline images sent as validated `cid:` attachments; `spikes/tiptap-email/` is the original spike.
 
-What exists in draft form: direct login with IMAP and SMTP verification, encrypted in-memory session vault, admin-mapped mail servers, SSRF guard with IP pinning, folder list, paged message list, message read with server-side HTML sanitization, sandboxed iframe viewer, send, flags, delete, attachment download, quick search (subject, sender, recipient), reply, reply all, forward, mark read/unread and star; contacts with search, recipient suggestions and vCard import/export; settings for display name (used in From), theme, density and time zone; rich-text signatures with up to 3 images (D-008), cleaned on save (`docs/DECISIONS.md` D-006, built ahead of Phase 2 at the product owner's request); drafts saved on close and every 30 s, delete with confirmation and Undo, Restore from Trash, confirmation dialogs, address history for suggestions, first-run guide and tooltips (D-007). Interface: icon rail, folder pane with role names and icons, paged list, labelled message toolbar, toasts, light and dark themes, phone layout with folder drawer and back button (plain CSS with tokens, `docs/DECISIONS.md` D-005). Development runs against Postfix + Dovecot with real TLS (`dev/up.sh`); GreenMail is kept for fast automated tests only.
+What exists in draft form: direct login with IMAP and SMTP verification, encrypted in-memory session vault, admin-mapped mail servers, SSRF guard with IP pinning, folder list, paged message list, message read with server-side HTML sanitization, sandboxed iframe viewer, send, flags, delete, attachment download, quick search (subject, sender, recipient), reply, reply all, forward, mark read/unread and star; contacts with search, recipient suggestions and vCard import/export; settings for display name (used in From), theme, density and time zone; rich-text signatures with up to 3 images (D-008), cleaned on save (`docs/DECISIONS.md` D-006, built ahead of Phase 2 at the product owner's request); drafts saved on close and every 30 s, delete with confirmation and Undo, Restore from Trash, confirmation dialogs, address history for suggestions, first-run guide and tooltips (D-007); folder tree with subfolders, Archive and Junk, move by menu or drag and drop, bulk actions, storage indicator (D-010); sent mail saved to Sent (D-011). Interface: icon rail, folder pane with role names and icons, paged list, labelled message toolbar, toasts, light and dark themes, phone layout with folder drawer and back button (plain CSS with tokens, `docs/DECISIONS.md` D-005). Development runs against Postfix + Dovecot with real TLS (`dev/up.sh`); GreenMail is kept for fast automated tests only.
 
 What does not exist: CSV contact import, language and other preferences beyond the four above, filtered or cross-folder search, attachment upload, threading, IDLE, connection pooling, admin UI, installer, i18n/RTL, SSO, separate render origin, application Docker image, frontend tests.
 
@@ -121,7 +121,7 @@ First prompt to give yourself: "Install deps, get `npm run typecheck` and `npm r
 
 - Folder roles, paging, flags, move, delete, custom folders, bulk actions, threading (Should).
 - Viewer: sanitizer test corpus, **separate-origin render host with one-time token**, remote-image opt-in, inline images, link warning.
-- Composer: run the editor selection spike first, then compose, reply, forward, autosave drafts, signatures, save to Sent (decision OPEN-4).
+- Composer: run the editor selection spike first, then compose, reply, forward, autosave drafts, signatures, save to Sent (decided, D-011).
 - Attachments: validated upload, drag-and-drop, preview, scan hook, archive limits.
 - Search: filters mapped to IMAP SEARCH, cross-folder, limits and timeouts.
 - **Exit:** every Must story in these epics meets its acceptance criteria with automated tests where practical.
@@ -155,7 +155,7 @@ Roadmap epics E19 to E23 (rules, scheduling, multi-account, OpenPGP, AI) are out
 | OPEN-1 | How SSO obtains mailbox access (OAuth2, master auth, panel credential) | Run the spike on a real cPanel and Dovecot setup, then ask for approval |
 | OPEN-2 | Shared hosting without Docker | Assume Docker-only for v1.0 unless told otherwise |
 | OPEN-3 | Rich-text editor | **Decided 2026-11-12: Tiptap**, made email-specific; Squire is the fallback (`docs/DECISIONS.md` D-003). Spike FOX-051 proves the risky parts |
-| OPEN-4 | Append to Sent through IMAP or rely on the server | Test on the target servers, then ask |
+| OPEN-4 | Append to Sent through IMAP or rely on the server | **Decided 2026-11-13: Foxalora appends the sent message to Sent through IMAP**, except on servers marked "saves sent mail itself" (Gmail) (`docs/DECISIONS.md` D-011) |
 
 Any deviation from the PRD or SAD needs a short written note: justification, security impact, operational impact.
 
@@ -174,8 +174,8 @@ Any deviation from the PRD or SAD needs a short written note: justification, sec
 
 - One IMAP connection per request; slow on large mailboxes.
 - The viewer iframe is sandboxed with a CSP but served by the same origin as the app.
-- Sending does not yet attach files or save to Sent.
-- Move between folders, bulk actions and drafts are not built yet; the interface shows only working features.
+- Sending does not yet attach files.
+- Conversation threads are not built yet; the interface shows only working features.
 - Inline (`cid:`) images in received mail are not displayed yet; they appear as attachments.
 
 ## 11. Definition of done (per story)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { folderIcon, folderLabel, restoreTarget, sortFolders } from '../../src/mail/folders';
+import { folderIcon, folderLabel, folderRows, formatBytes, isProtected, moveTargets, restoreTarget, sortFolders } from '../../src/mail/folders';
 import { avatarOf, forwardSubject, replyAllRecipients, replySubject, setDisplayTimeZone, shortDate } from '../../src/mail/format';
 
 const f = (name: string, specialUse: string | null) => ({ name, specialUse });
@@ -16,6 +16,37 @@ describe('folders', () => {
   it('puts role folders first in a fixed order, then the rest alphabetically', () => {
     const sorted = sortFolders([f('Zeta', null), f('Trash', '\\Trash'), f('Alpha', null), f('Sent', '\\Sent'), f('INBOX', '\\Inbox'), f('Junk', '\\Junk'), f('Drafts', '\\Drafts')]);
     expect(sorted.map(folderLabel)).toEqual(['Inbox', 'Drafts', 'Sent', 'Junk', 'Trash', 'Alpha', 'Zeta']);
+  });
+});
+
+describe('folder tree', () => {
+  const box = (path: string, specialUse: string | null = null, parentPath = '', name = path.split(/[./]/).pop()!) => ({ path, name, specialUse, parentPath, selectable: true });
+  const folders = [
+    box('INBOX', '\\Inbox'), box('INBOX.Work', null, 'INBOX'), box('INBOX.Personal', null, 'INBOX'), box('INBOX.Work.2026', null, 'INBOX.Work'),
+    box('Sent', '\\Sent'), box('Trash', '\\Trash'), box('Archive', '\\Archive'), box('Zeta'), box('Alpha'), box('Lost.Child', null, 'Lost'),
+  ];
+  const show = (rows: { folder: { path: string }; depth: number }[]) => rows.map((r) => `${'-'.repeat(r.depth)}${r.folder.path}`);
+
+  it('nests subfolders under their parent, roles first, then the rest alphabetically', () => {
+    expect(show(folderRows(folders))).toEqual([
+      'INBOX', '-INBOX.Personal', '-INBOX.Work', '--INBOX.Work.2026', 'Sent', 'Archive', 'Trash', 'Alpha', 'Lost.Child', 'Zeta',
+    ]);
+  });
+
+  it('hides the inside of collapsed folders and says which rows can expand', () => {
+    const rows = folderRows(folders, new Set(['INBOX.Work']));
+    expect(show(rows)).toContain('-INBOX.Work');
+    expect(show(rows)).not.toContain('--INBOX.Work.2026');
+    expect(rows.find((r) => r.folder.path === 'INBOX.Work')).toMatchObject({ hasChildren: true, expanded: false });
+  });
+
+  it('protects role folders, offers only other selectable folders as move targets, and formats sizes', () => {
+    expect(isProtected({ path: 'INBOX', specialUse: null })).toBe(true);
+    expect(isProtected({ path: 'Archive', specialUse: '\\Archive' })).toBe(true);
+    expect(isProtected({ path: 'INBOX.Work', specialUse: null })).toBe(false);
+    expect(moveTargets([...folders, { ...box('Container'), selectable: false }], 'INBOX').map((f) => f.path)).not.toContain('INBOX');
+    expect(moveTargets([...folders, { ...box('Container'), selectable: false }], 'INBOX').map((f) => f.path)).not.toContain('Container');
+    expect([formatBytes(512), formatBytes(26624), formatBytes(1073741824), formatBytes(1610612736)]).toEqual(['512 B', '26 KB', '1 GB', '1.5 GB']);
   });
 });
 

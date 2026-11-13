@@ -54,7 +54,7 @@ function blobToBase64(blob: Blob): Promise<string> {
 export default function Compose({ init, onClose, onSent, onDraftSaved, signatures, defaultSignatureId }: {
   init: ComposeInit;
   onClose: () => void;
-  onSent?: () => void;
+  onSent?: (sentCopy?: 'saved' | 'server' | 'no_folder' | 'failed') => void;
   onDraftSaved?: () => void;
   signatures?: Record<string, Signature>;
   defaultSignatureId?: string;
@@ -197,8 +197,8 @@ export default function Compose({ init, onClose, onSent, onDraftSaved, signature
     setSending(true);
     try {
       if (saving.current) await saving.current.catch(() => undefined);
-      await api.send({ to: recipients, cc: split(cc), bcc: split(bcc), subject, text: out.text, html: out.html, inlineImages: await inlineImages(out), draftId: draftId.current });
-      onSent?.();
+      const res = await api.send({ to: recipients, cc: split(cc), bcc: split(bcc), subject, text: out.text, html: out.html, inlineImages: await inlineImages(out), draftId: draftId.current });
+      onSent?.(res.sentCopy);
       onClose();
     } catch (e) {
       setErr((e as Error).message);

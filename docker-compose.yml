@@ -38,6 +38,8 @@ services:
       - ./dev/mailservers/postfix-accounts.cf:/tmp/docker-mailserver/postfix-accounts.cf:ro
       # Development only: outside addresses bounce instead of reaching the internet.
       - ./dev/mailservers/postfix-main.cf:/tmp/docker-mailserver/postfix-main.cf:ro
+      # Test accounts get a 1 GB quota, so the storage indicator has something to show.
+      - ./dev/mailservers/dovecot-quotas.cf:/tmp/docker-mailserver/dovecot-quotas.cf:ro
       - maildata-dev:/var/mail
     ports:
       - "143:143"

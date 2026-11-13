@@ -28,6 +28,33 @@ export class MailController {
     return this.mail.listFolders(req.mailbox);
   }
 
+  @Get('mailboxes/quota')
+  quota(@Req() req: AuthedRequest) {
+    return this.mail.quota(req.mailbox);
+  }
+
+  @Post('mailboxes')
+  createFolder(@Req() req: AuthedRequest, @Body() body: { name?: unknown; parent?: unknown } = {}) {
+    return this.mail.createFolder(req.mailbox, body?.name, body?.parent);
+  }
+
+  @Patch('mailboxes')
+  renameFolder(@Req() req: AuthedRequest, @Body() body: { path?: unknown; name?: unknown } = {}) {
+    return this.mail.renameFolder(req.mailbox, body?.path, body?.name);
+  }
+
+  @Delete('mailboxes')
+  @HttpCode(204)
+  async deleteFolder(@Req() req: AuthedRequest, @Query('path') path?: unknown) {
+    await this.mail.deleteFolder(req.mailbox, path);
+  }
+
+  @Post('messages/bulk')
+  @HttpCode(200)
+  bulk(@Req() req: AuthedRequest, @Body() body: unknown) {
+    return this.mail.bulk(req.mailbox, body);
+  }
+
   @Get('messages')
   list(@Req() req: AuthedRequest, @Query('folder') folder = 'INBOX', @Query('page') page = '1', @Query('pageSize') pageSize = '25', @Query('q') q?: unknown) {
     return this.mail.listMessages(req.mailbox, folder, Number(page), Number(pageSize), q);
@@ -97,6 +124,7 @@ export class MailController {
     if (prefs.rememberRecipients) {
       await this.recipients.record(owner(req), [...sent.to, ...sent.cc, ...sent.bcc]).catch(() => this.log.warn('recipient history not updated'));
     }
-    return { status: 'sent' };
+    if (sent.sentCopy === 'failed') this.log.warn('message sent; Sent copy not saved');
+    return { status: 'sent', sentCopy: sent.sentCopy };
   }
 }

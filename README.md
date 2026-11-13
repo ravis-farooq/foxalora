@@ -76,11 +76,13 @@ Progress and test status: `docs/PROTOTYPE_RESULTS.md` (Phase 0), `docs/PHASE1_PR
 | Delete with confirmation and Undo; Restore from Trash (to the original folder or Inbox); confirmation dialogs | `frontend/src/ui/ConfirmProvider.tsx`, `Mailbox.tsx`, `mail/folders.ts#restoreTarget` |
 | Recipient suggestions from contacts and address history (opt-out, clear) | `backend/src/contacts/recipients.service.ts`, `RecipientInput.tsx` |
 | First-run guide, tooltips on hover and focus, skip link, visual-only feedback | `frontend/src/components/Guide.tsx`, `frontend/src/ui/TooltipLayer.tsx` |
+| MAIL folders inside folders (create, rename, delete), Archive, Junk, Move menu and drag and drop, bulk actions, storage (IMAP QUOTA) | `backend/src/mail/folder-ops.ts`, `mail.service.ts#bulk`, `frontend/src/components/Mailbox.tsx`, `mail/folders.ts#folderRows` |
+| COMP sent mail saved to Sent through IMAP (same message, Bcc kept), skipped for servers that save it themselves | `backend/src/mail/outgoing.ts#buildSendMime`, `mail/sent-copy.ts` |
 
 ## Deliberately NOT in the prototype
 
 CSV contact import, filtered and cross-folder search, attachments on send,
-moving messages with a folder picker, bulk actions, threading, IMAP IDLE/connection pooling, admin UI,
+threading, IMAP IDLE/connection pooling, admin UI,
 installer wizard, i18n/RTL, SSO adapters, separate-origin email rendering,
 Docker image for the app, most tests (only backend security unit tests exist).
 All are in the Development Backlog.

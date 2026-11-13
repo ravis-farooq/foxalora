@@ -10,6 +10,8 @@ export interface ServerInput {
   smtpPort: number;
   smtpTls: TlsPolicy;
   allowPrivate: boolean;
+  /** The server stores sent mail itself (Gmail, Microsoft 365): Foxalora does not add a Sent copy. */
+  savesSent?: boolean;
 }
 
 export class ServerValidationError extends Error {}
@@ -58,6 +60,7 @@ export function validateServerInput(input: ServerInput, opts: { production: bool
     smtpPort,
     smtpTls,
     allowPrivate: input.allowPrivate === true,
+    savesSent: input.savesSent === true,
   };
 }
 

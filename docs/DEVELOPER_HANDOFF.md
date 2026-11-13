@@ -113,6 +113,8 @@ Full reasons, security and operational impact are in `docs/DECISIONS.md`.
 | D-007 | Never lose work, never surprise: drafts saved on close, confirmation before deleting, Undo and Restore from Trash, recipient history (address only, can be switched off), first-run guide, tooltips, no sound-only feedback. |
 | D-008 | Signatures can hold up to 3 images (PNG, JPEG, GIF, 64 KB each), stored in the signature and sent as inline attachments, like Roundcube. |
 | D-009 | The local test mail servers deliver only to their own test domains; mail to outside addresses bounces at once. |
+| D-010 | Folder tree with subfolders (create, rename, delete), Archive and Junk buttons, Move menu and drag and drop, tick-box selection with bulk actions, hover actions, storage indicator. Threads are planned separately. |
+| D-011 | OPEN-4 decided: Foxalora saves each sent message to Sent through IMAP, except on servers marked "saves sent mail itself" (Gmail). |
 
 **Open decisions; do not decide these alone:**
 
@@ -120,7 +122,6 @@ Full reasons, security and operational impact are in `docs/DECISIONS.md`.
 |---|---|---|
 | OPEN-1 | How single sign-on from cPanel gets mailbox access | Needs a spike on a real cPanel + Dovecot, then product-owner approval |
 | OPEN-2 | Shared hosting without Docker | Docker-only for v1.0 unless told otherwise |
-| OPEN-4 | Save sent mail to Sent through IMAP, or rely on the server | Test on the target servers, then ask |
 | D-007 note | Does "no copy of mail in the database" also forbid storing recipient addresses? | Product owner to confirm; switching history off by default is a one-line change |
 
 ## 7. Where we are and what is next
@@ -135,15 +136,15 @@ Full reasons, security and operational impact are in `docs/DECISIONS.md`.
 | 5. SSO, Docker image, installer, monitoring | Not started |
 | 6. Security verification and release | Not started |
 
-Working today: sign-in, folders with roles and counts, paged list, search (subject, sender, recipient), reading with safe HTML, reply / reply all / forward, delete with confirmation and Undo, restore from Trash, mark read/unread/star, drafts (save on close, autosave, continue, discard), contacts with suggestions and vCard, settings (name, theme, density, time zone, address history), signatures with images, first-run guide, tooltips, phone layout, light and dark themes.
+Working today: sign-in, folders with roles and counts, paged list, search (subject, sender, recipient), reading with safe HTML, reply / reply all / forward, delete with confirmation and Undo, restore from Trash, folders inside folders (create, rename, delete), Archive and Junk, move by menu or drag and drop, select several messages and act on them together, storage indicator, sent mail kept in Sent, mark read/unread/star, drafts (save on close, autosave, continue, discard), contacts with suggestions and vCard, settings (name, theme, density, time zone, address history), signatures with images, first-run guide, tooltips, phone layout, light and dark themes.
 
 **Good next stories** (ids are in `docs/Foxalora-Development-Backlog.xlsx`, also importable to Jira from `docs/Foxalora-Jira-Import.csv`):
 
 - **Release blocker:** separate-origin render host for email HTML (viewer epic E06).
 - Attachments upload and forwarding original attachments (E08); inline `cid:` images in the viewer (E06).
-- Move messages with a folder picker, bulk selection and actions (FOX-035, FOX-037); custom folders (FOX-038).
+- Conversation threads (FOX-041), designed on server THREAD support with our own fallback.
 - Search filters and cross-folder search (FOX-068, FOX-069, FOX-071).
-- Save to Sent (needs OPEN-4 first, FOX-059); send error handling (FOX-060).
+- Send error handling (FOX-060).
 - CSV contact import (FOX-074).
 - Connection pooling (FOX-029) and structured JSON logs (FOX-119).
 - Arabic right-to-left interface and translations (FOX-108); WCAG 2.2 AA audit (FOX-107); Playwright browser tests (FOX-109).

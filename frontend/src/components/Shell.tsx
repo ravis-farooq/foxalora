@@ -129,8 +129,11 @@ export default function Shell({ email, onLogout }: { email: string; onLogout: ()
               setCompose(null);
               setMailVersion((v) => v + 1); // a draft may have been saved or discarded
             }}
-            onSent={() => {
-              toast('success', 'Message sent.');
+            onSent={(sentCopy) => {
+              // The message was delivered in every case; only the Sent copy can differ.
+              if (sentCopy === 'failed') toast('info', 'Message sent, but a copy could not be saved in Sent.');
+              else if (sentCopy === 'no_folder') toast('info', 'Message sent. Your mail server has no Sent folder, so no copy was kept.');
+              else toast('success', 'Message sent.');
               setMailVersion((v) => v + 1);
             }}
             onDraftSaved={() => setMailVersion((v) => v + 1)}

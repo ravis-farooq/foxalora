@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
-import { buildDraftMime, parseOutgoing } from '../src/mail/outgoing';
+import { buildDraftMime, buildSendMime, parseOutgoing } from '../src/mail/outgoing';
 
 describe('parseOutgoing: messages to send', () => {
   it('accepts a normal message', () => {
@@ -45,5 +45,23 @@ describe('buildDraftMime', () => {
     expect(s).toContain('Draft text');
     expect(messageId).toMatch(/^<[^<>\s]+@x\.test>$/);
     expect(s).toContain(`Message-ID: ${messageId}`);
+  });
+});
+
+describe('buildSendMime (one message for SMTP and the Sent folder, OPEN-4)', () => {
+  it('builds the same message twice: without Bcc for sending, with Bcc for the Sent copy', async () => {
+    const d = parseOutgoing({ to: ['dave@x.test'], bcc: ['boss@x.test'], subject: 'Report', text: 'Hello', html: '<p>Hello</p>' }, 'send');
+    const m = await buildSendMime('carol@x.test', 'Carol Smith', d);
+    const smtp = m.smtpRaw.toString('utf8');
+    const copy = m.copyRaw.toString('utf8');
+    const header = (raw: string, name: string) => new RegExp(`^${name}: (.*)$`, 'mi').exec(raw)?.[1];
+    expect(header(smtp, 'Message-ID')).toBe(m.messageId);
+    expect(header(copy, 'Message-ID')).toBe(m.messageId);
+    expect(header(copy, 'Date')).toBe(header(smtp, 'Date'));
+    expect(header(smtp, 'From')).toBe('Carol Smith <carol@x.test>');
+    expect(header(smtp, 'Bcc')).toBeUndefined(); // recipients must not see Bcc
+    expect(header(copy, 'Bcc')).toBe('boss@x.test'); // the sender's own copy keeps it
+    expect(m.envelope).toEqual({ from: 'carol@x.test', to: ['dave@x.test', 'boss@x.test'] });
+    expect(m.messageId).toMatch(/^<[^<>\s]+@x\.test>$/);
   });
 });
