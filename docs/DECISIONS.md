@@ -193,6 +193,12 @@ Short records of project decisions, including deviations from the PRD or SAD (CL
 **Operational impact**
 - To test delivery to real mailboxes, map a real domain to a real mail server with the operator CLI (`server:add`, `domain:map`) on your own machine. Never commit those settings or credentials.
 
+**Amended 2026-11-16: outside mail is caught by Mailpit instead of bounced**
+- **Why:** to test sending to real-looking addresses (gmail.com, customer domains) and inspect exactly what Foxalora sends, without any mail reaching the internet.
+- **Change:** Postfix relays every non-local message to a Mailpit container (`axllent/mailpit:v1.32.0`, MIT licence, actively maintained) with `relayhost = [mailpit]:1025`. Web inbox: http://localhost:8025 (bound to 127.0.0.1); Mailpit's SMTP port is reachable only from the mail server on the `foxalora-devmail` Docker network. `dev/up.sh` starts it and recreates older mail server containers (mail kept).
+- **Security impact:** unchanged guarantee. The relay host is the only next hop: if Mailpit is down, outside mail waits in the Postfix queue and is never sent directly. Mailpit displays a `Bcc:` line built from the envelope; the message Foxalora sends carries no Bcc header (checked on the delivered copy).
+- **Operational impact:** one more dev container; Mailpit keeps at most 2,000 messages. The Exim test server is unchanged (its own domain only).
+
 ## D-010 Folders, archive, junk, bulk actions and storage, simpler than Roundcube
 
 - **Date:** 2026-11-13

@@ -42,7 +42,7 @@ Useful variants:
 
 These exist **only in the local test servers** on your own machine. They are fake, safe to share, and do not work anywhere else. Never use a real mailbox for development.
 
-The test servers **never deliver to the internet**: mail to any address outside the test domains comes straight back with "mail to outside addresses is not delivered". Send test mail between the accounts below. To try delivery to real mailboxes, see D-009 in `docs/DECISIONS.md`.
+The test servers **never deliver to the internet**. Mail between the accounts below is delivered normally; mail to any other address (gmail.com, a customer domain) is caught by **Mailpit**, a local web inbox at http://localhost:8025, where you can read it and inspect its headers, HTML and raw source. Mailpit shows a `Bcc:` line it builds from the delivery envelope; recipients never receive one. To try delivery to real mailboxes, see D-009 in `docs/DECISIONS.md`.
 
 | Server | Address | Password | Notes |
 |---|---|---|---|
@@ -112,7 +112,7 @@ Full reasons, security and operational impact are in `docs/DECISIONS.md`.
 | D-006 | Contacts, settings and signatures built before the rest of Phase 2, at the product owner's request. |
 | D-007 | Never lose work, never surprise: drafts saved on close, confirmation before deleting, Undo and Restore from Trash, recipient history (address only, can be switched off), first-run guide, tooltips, no sound-only feedback. |
 | D-008 | Signatures can hold up to 3 images (PNG, JPEG, GIF, 64 KB each), stored in the signature and sent as inline attachments, like Roundcube. |
-| D-009 | The local test mail servers deliver only to their own test domains; mail to outside addresses bounces at once. |
+| D-009 | The local test mail servers deliver only to their own test domains; mail to outside addresses is caught by Mailpit (http://localhost:8025) and never reaches the internet. |
 | D-010 | Folder tree with subfolders (create, rename, delete), Archive and Junk buttons, Move menu and drag and drop, tick-box selection with bulk actions, hover actions, storage indicator. Threads are planned separately. |
 | D-011 | OPEN-4 decided: Foxalora saves each sent message to Sent through IMAP, except on servers marked "saves sent mail itself" (Gmail). |
 

@@ -32,8 +32,10 @@ step "Test certificates"
 running() { [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = "true" ]; }
 exists() { docker inspect "$1" >/dev/null 2>&1; }
 
-# Containers created before outside delivery was turned off are recreated (mail is kept in the volume).
-if exists foxalora-mailserver && ! docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}' foxalora-mailserver | grep -q dovecot-quotas.cf; then
+# Containers created before the current test settings (quotas, Mailpit relay) are recreated
+# (mail is kept in the volume).
+if exists foxalora-mailserver && { ! docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}' foxalora-mailserver | grep -q dovecot-quotas.cf \
+  || ! docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' foxalora-mailserver | grep -q foxalora-devmail; }; then
   echo "Updating the mail server to the current test settings (mail is kept)."
   docker rm -f foxalora-mailserver >/dev/null
 fi
@@ -43,7 +45,7 @@ if running foxalora-exim; then
   docker rm -f foxalora-exim >/dev/null
 fi
 
-SERVICES=(mailserver postgres valkey)
+SERVICES=(mailserver mailpit postgres valkey)
 [ "$WITH_GREENMAIL" = yes ] && SERVICES+=(greenmail)
 
 step "Starting services: ${SERVICES[*]}"
@@ -78,6 +80,12 @@ else
     -v "$ROOT/dev/mailservers/dovecot-quotas.cf:/tmp/docker-mailserver/dovecot-quotas.cf:ro" \
     -v foxalora-maildata-dev:/var/mail \
     -p 143:143 -p 993:993 -p 587:587 -p 465:465 mailserver/docker-mailserver:16.0.1
+  # Mailpit catches mail to outside addresses; the mail server reaches it by the name "mailpit".
+  docker network inspect foxalora-devmail >/dev/null 2>&1 || docker network create foxalora-devmail >/dev/null
+  start foxalora-mailpit --network foxalora-devmail --network-alias mailpit -e MP_MAX_MESSAGES=2000 \
+    -p 127.0.0.1:8025:8025 axllent/mailpit:v1.32.0
+  docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' foxalora-mailserver | grep -q foxalora-devmail \
+    || docker network connect foxalora-devmail foxalora-mailserver
   start foxalora-postgres -p "127.0.0.1:${FOXALORA_PG_PORT:-55432}:5432" \
     -e POSTGRES_DB=foxalora -e POSTGRES_USER=foxalora \
     -e POSTGRES_PASSWORD="${FOXALORA_DB_PASSWORD:-foxalora-dev-owner}" \
@@ -120,6 +128,7 @@ cat <<EOF
 Foxalora dev services are ready.
   Mail server : Postfix + Dovecot, IMAP 993 (TLS), SMTP 587 (STARTTLS)
   Test users  : carol@dovecot.test / carol-pass-1     dave@dovecot.test / dave-pass-1
+  Mailpit     : http://localhost:8025   (mail sent to outside addresses lands here, never on the internet)
 EOF
 [ "$WITH_GREENMAIL" = yes ] && echo "  GreenMail   : alice@example.com / alice123            bob@example.com / bob123"
 echo "  Environment : . dev/env.sh   (database, Valkey and test CA settings for manual commands and tests)"

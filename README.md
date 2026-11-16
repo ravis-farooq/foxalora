@@ -39,8 +39,8 @@ a hostile newsletter (tracking pixel, CSS background, deceptive link), plain tex
 GreenMail stays in `docker-compose.yml` (profile `greenmail`) for fast automated tests; it
 does not use TLS and behaves differently from production servers (`docs/PROTOTYPE_RESULTS.md`).
 The API trusts the test CA through `NODE_EXTRA_CA_CERTS`; certificate verification stays on.
-The test servers never deliver to the internet: mail to outside addresses bounces at once
-(`dev/mailservers/postfix-main.cf`). Ports 143, 993, 587 and 465 must be free on the machine.
+The test servers never deliver to the internet: mail to outside addresses (gmail.com and so on)
+is caught by Mailpit, a local web inbox at http://localhost:8025 (`dev/mailservers/postfix-main.cf`). Ports 143, 993, 587 and 465 must be free on the machine.
 
 New developers: start with `docs/DEVELOPER_HANDOFF.md` (setup, test accounts, rules, how to contribute).
 

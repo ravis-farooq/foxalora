@@ -7,6 +7,7 @@
 #               carol@dovecot.test / carol-pass-1, dave@dovecot.test / dave-pass-1
 #   postgres    localhost:55432 (not 5432, to avoid clashing with a local PostgreSQL)
 #   valkey      localhost:6379 (Redis-compatible)
+#   mailpit     catches all mail to outside addresses (gmail.com, ...): web inbox http://localhost:8025
 # Optional (profiles):
 #   greenmail   --profile greenmail: plaintext IMAP 3143 / SMTP 3025, alice@example.com / alice123,
 #               bob@example.com / bob123. For quick automated tests only: no folders, no TLS.
@@ -36,7 +37,7 @@ services:
     volumes:
       - ./dev/mailservers/certs:/tmp/certs:ro
       - ./dev/mailservers/postfix-accounts.cf:/tmp/docker-mailserver/postfix-accounts.cf:ro
-      # Development only: outside addresses bounce instead of reaching the internet.
+      # Development only: outside addresses go to Mailpit instead of the internet.
       - ./dev/mailservers/postfix-main.cf:/tmp/docker-mailserver/postfix-main.cf:ro
       # Test accounts get a 1 GB quota, so the storage indicator has something to show.
       - ./dev/mailservers/dovecot-quotas.cf:/tmp/docker-mailserver/dovecot-quotas.cf:ro
@@ -46,6 +47,18 @@ services:
       - "993:993"
       - "587:587"
       - "465:465"
+    networks: [default, devmail]
+
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    container_name: foxalora-mailpit
+    environment:
+      MP_MAX_MESSAGES: '2000'
+    ports:
+      - "127.0.0.1:8025:8025" # web inbox; SMTP 1025 is reachable only from the mail server
+    networks:
+      devmail:
+        aliases: [mailpit]
 
   postgres:
     image: postgres:18.6-alpine
@@ -98,6 +111,10 @@ services:
       - "993:993"
       - "587:587"
       - "465:465"
+
+networks:
+  devmail:
+    name: foxalora-devmail
 
 volumes:
   pgdata-dev:
