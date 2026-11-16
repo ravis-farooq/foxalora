@@ -18,4 +18,4 @@ deploy/letsencrypt/
 .vite/
 dev/.vault-key
 deploy/testing/certs/
-deploy/testing/nginx/htpasswd
+deploy/testing/gate/

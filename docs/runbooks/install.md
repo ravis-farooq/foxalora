@@ -64,7 +64,21 @@ Certificate renewal (daily; it renews only when needed):
 ( crontab -l 2>/dev/null; echo "17 3 * * * /opt/foxalora/deploy/renew-cert.sh >> /var/log/foxalora-cert.log 2>&1" ) | crontab -
 ```
 
-## 5. Test server for testers (testing add-on)
+## 5. Test server for testers
+
+### Option A: testers use Gmail test accounts
+
+Each tester creates a new Gmail account just for testing (not a personal one), turns on 2-Step Verification and creates an app password. Then:
+
+```bash
+./deploy/cli.sh server:add <tenantId> gmail --imap imap.gmail.com:993:tls --smtp smtp.gmail.com:465:tls --saves-sent
+./deploy/cli.sh domain:map <tenantId> gmail.com gmail
+./deploy/testing/gate.sh enable    # password gate in front of the site; prints the login
+```
+
+Testers sign in to Foxalora with their Gmail address and the app password. Mail is really delivered.
+
+### Option B: private test mail server (testing add-on)
 
 For a test install that several testers use, turn on the testing add-on right after section 4:
 

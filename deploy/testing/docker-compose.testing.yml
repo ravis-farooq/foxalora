@@ -1,5 +1,5 @@
-# Testing add-on: a private test mail server, a Mailpit inbox for outside mail, and a shared
-# password gate in front of the site. Turned on by deploy/testing/enable.sh; used through
+# Testing add-on: a private test mail server and a Mailpit inbox for outside mail. Always used
+# together with the password gate (docker-compose.gate.yml). Turned on by deploy/testing/enable.sh; used through
 # deploy/compose.sh. NOT for customer installs.
 #
 # testmail  Postfix + Dovecot for @foxalora.test accounts (deploy/testing/tester.sh). No host ports:
@@ -16,7 +16,7 @@ services:
 
   web:
     volumes:
-      - ./testing/nginx:/etc/nginx/foxalora.d:ro
+      - ./testing/nginx/mailpit.conf:/etc/nginx/foxalora.d/mailpit.conf:ro
     depends_on:
       mailpit:
         condition: service_started

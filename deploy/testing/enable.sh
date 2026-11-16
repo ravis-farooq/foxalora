@@ -34,10 +34,10 @@ else
 fi
 
 step "Password gate"
-if [ ! -s nginx/htpasswd ]; then
+if [ ! -s gate/htpasswd ]; then
   GATE=$(./gate.sh set tester | tail -1)
 else
-  GATE="Gate logins kept: $(cut -d: -f1 nginx/htpasswd | paste -sd, -)"
+  GATE="Gate logins kept: $(cut -d: -f1 gate/htpasswd | paste -sd, -)"
 fi
 echo "$GATE"
 

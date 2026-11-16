@@ -1,0 +1,7 @@
+# Password gate add-on: HTTP basic auth in front of the whole site, for test installs.
+# Turned on by deploy/testing/gate.sh enable (or testing/enable.sh); used through deploy/compose.sh.
+services:
+  web:
+    volumes:
+      - ./testing/nginx/gate.conf:/etc/nginx/foxalora.d/gate.conf:ro
+      - ./testing/gate:/etc/nginx/foxalora-gate:ro # htpasswd (hashes only), managed by gate.sh
