@@ -18,6 +18,7 @@ import { AuditService } from '../audit/audit.service';
 import { MailService } from '../mail/mail.service';
 import { RegistryService } from '../registry/registry.service';
 import { AuthedRequest, AuthGuard, COOKIE_NAME, hasCsrfHeader } from './auth.guard';
+import { loginFailureReason } from './login-reason';
 import { LoginThrottleService } from './login-throttle.service';
 import { VaultService } from './vault.service';
 
@@ -77,7 +78,7 @@ export class AuthController {
     } catch (e: unknown) {
       // Log reason class only. Never log the password or raw error objects from
       // the mail libraries (they may echo server responses).
-      const reason = (e as { code?: string; name?: string })?.code ?? (e as Error)?.name ?? 'error';
+      const reason = loginFailureReason(e);
       this.log.warn(`login failed (${reason})`);
       await this.throttle.recordFailure(email, ip);
       await this.audit.record(server.tenantId, 'auth.login_failed', email, { ip, reason, delayedMs: decision.delayMs });

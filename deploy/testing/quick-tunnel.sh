@@ -8,6 +8,7 @@
 #   ./deploy/testing/quick-tunnel.sh down     stop everything (database kept)
 #
 # The quick-tunnel link changes every time the tunnel restarts; this machine must stay on.
+# Password gate: on by default; FOXALORA_GATE=0 in deploy/.env turns it off.
 # Same images, settings and hardening as docker-compose.prod.yml; secrets in deploy/.env.
 set -euo pipefail
 cd "$(dirname "$0")/.."     # deploy/
@@ -57,7 +58,13 @@ EOF
       -subj "/CN=web" -addext "subjectAltName=DNS:web" >/dev/null 2>&1
     chmod 644 certs/quick/privkey.pem # read by the nginx worker; used only on the local Docker network
   fi
-  [ -s testing/gate/htpasswd ] || GATE_LINE=$(./testing/gate.sh set tester | tail -1)
+  GATE_ARGS=()
+  if grep -qx 'FOXALORA_GATE=0' .env; then
+    GATE_LINE="Password gate: OFF (anyone with the link reaches the login page)"
+  else
+    [ -s testing/gate/htpasswd ] || GATE_LINE=$(./testing/gate.sh set tester | tail -1)
+    GATE_ARGS=(-v "$PWD/testing/nginx/gate.conf:/etc/nginx/foxalora.d/gate.conf:ro" -v "$PWD/testing/gate:/etc/nginx/foxalora-gate:ro")
+  fi
 
   docker network inspect $N >/dev/null 2>&1 || docker network create $N >/dev/null
   docker rm -f ${P}-cloudflared ${P}-web ${P}-api >/dev/null 2>&1 || true
@@ -101,10 +108,8 @@ EOF
     foxalora-api:local >/dev/null
   docker run -d --name ${P}-web --network $N --network-alias web --restart unless-stopped -e DOMAIN="$DOMAIN" \
     -v "$PWD/certs/quick:/certs:ro" \
-    -v "$PWD/testing/nginx/gate.conf:/etc/nginx/foxalora.d/gate.conf:ro" \
     -v "$PWD/testing/nginx/tunnel.conf:/etc/nginx/foxalora.d/tunnel.conf:ro" \
-    -v "$PWD/testing/gate:/etc/nginx/foxalora-gate:ro" \
-    foxalora-web:local >/dev/null
+    "${GATE_ARGS[@]}" foxalora-web:local >/dev/null
 
   # Tenant and Gmail mapping (testers sign in with Gmail test accounts and app passwords).
   TENANT_ID=$(cli tenant:list | head -1 | awk '{print $1}')
