@@ -104,6 +104,10 @@ It prints the gate login and the mailbox passwords. Then send testers `docs/runb
 
 Without the add-on, keep a test install private another way: allow only your own IP on ports 80/443 in the cloud firewall (open 80 to all while Let's Encrypt issues or renews), or put it behind Cloudflare Tunnel with Cloudflare Access.
 
+## Stopgap: run on your own machine with a Cloudflare quick tunnel
+
+Before a server exists, `./deploy/testing/quick-tunnel.sh up` runs the same stack on the current machine with plain `docker` (no Compose needed), maps Gmail, turns on the password gate and publishes it at a random `https://<name>.trycloudflare.com` link. The machine must stay on, and the link changes whenever the tunnel restarts. `./deploy/testing/quick-tunnel.sh down` stops it (database kept). Nginx trusts the visitor address Cloudflare sends (`CF-Connecting-IP`) only from the private Docker network, so login throttling stays per visitor.
+
 ## 6. Day-to-day
 
 | Task | Command (from `/opt/foxalora`) |
