@@ -44,9 +44,14 @@ server {
 
     client_max_body_size 30m;
 
+    # Optional add-ons (the testing add-on mounts its password gate and Mailpit route here).
+    # Empty in a normal install.
+    include /etc/nginx/foxalora.d/*.conf;
+
     location /api/ {
         proxy_pass http://api:3000;
         proxy_set_header Host $host;
+        proxy_set_header Authorization ""; # a password gate's credentials never reach the API
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 60s;

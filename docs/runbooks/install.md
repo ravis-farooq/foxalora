@@ -64,21 +64,43 @@ Certificate renewal (daily; it renews only when needed):
 ( crontab -l 2>/dev/null; echo "17 3 * * * /opt/foxalora/deploy/renew-cert.sh >> /var/log/foxalora-cert.log 2>&1" ) | crontab -
 ```
 
-## 5. Keep a test install private
+## 5. Test server for testers (testing add-on)
 
-Until the release blockers are fixed, restrict who can reach it. Either:
-- Allow only your own IP on ports 80/443 in the cloud firewall (temporarily open 80 to all while Let's Encrypt issues or renews), or
-- Put it behind Cloudflare Tunnel with Cloudflare Access (login wall in front of the site).
+For a test install that several testers use, turn on the testing add-on right after section 4:
+
+```bash
+./deploy/testing/enable.sh 5      # 5 tester mailboxes
+```
+
+It adds, on the same server:
+- a **private test mail server** for `@foxalora.test` mailboxes (a reserved name that can never be real). It has no ports open to the internet: only Foxalora can reach it, over TLS with a certificate from a private CA that may only sign `foxalora.test` names (its key is deleted after use);
+- **Mailpit** at `https://<domain>/mailpit/`, which catches mail sent to any outside address. Nothing reaches the internet;
+- a **shared password gate** (HTTP basic auth) in front of the whole site, so only people with the gate login can reach it. The gate credentials are removed before requests reach the API.
+
+It prints the gate login and the mailbox passwords. Then send testers `docs/runbooks/testing.md` with their mailbox and the gate login. You do not need to map any other mail server.
+
+| Task | Command |
+|---|---|
+| Add a tester mailbox | `./deploy/testing/tester.sh add <name>` |
+| New mailbox password | `./deploy/testing/tester.sh password <name>` |
+| Remove a mailbox (and its mail) | `./deploy/testing/tester.sh remove <name>` |
+| List mailboxes | `./deploy/testing/tester.sh list` |
+| Add or change a gate login | `./deploy/testing/gate.sh set <user>` |
+| Remove a gate login | `./deploy/testing/gate.sh remove <user>` |
+
+Without the add-on, keep a test install private another way: allow only your own IP on ports 80/443 in the cloud firewall (open 80 to all while Let's Encrypt issues or renews), or put it behind Cloudflare Tunnel with Cloudflare Access.
 
 ## 6. Day-to-day
 
 | Task | Command (from `/opt/foxalora`) |
 |---|---|
-| Status | `docker compose -f deploy/docker-compose.prod.yml ps` |
-| API logs | `docker compose -f deploy/docker-compose.prod.yml logs -f api` |
-| Update | `git pull && ./deploy/install.sh webmail.yourdomain.com` (rebuilds, migrates, keeps data) |
-| Stop | `docker compose -f deploy/docker-compose.prod.yml down` (data is kept) |
-| Back up | `deploy/.env`, and `docker compose -f deploy/docker-compose.prod.yml exec -T postgres pg_dump -U foxalora foxalora > backup.sql` |
+| Status | `./deploy/compose.sh ps` |
+| API logs | `./deploy/compose.sh logs -f api` |
+| Update | `git pull && ./deploy/install.sh webmail.yourdomain.com` (rebuilds, migrates, keeps data and the add-on) |
+| Stop | `./deploy/compose.sh down` (data is kept) |
+| Back up | `deploy/.env`, and `./deploy/compose.sh exec -T postgres pg_dump -U foxalora foxalora > backup.sql` |
+
+`deploy/compose.sh` is `docker compose` with the right files for this install (it includes the testing add-on when it is on).
 
 What is stored: PostgreSQL holds tenants, mail server settings, contacts, preferences, signatures and audit events, never mail or mailbox passwords. Valkey holds encrypted sessions in memory only; restarting it signs users out.
 
@@ -86,4 +108,6 @@ What is stored: PostgreSQL holds tenants, mail server settings, contacts, prefer
 
 On a development machine with plain `docker` (no Compose plugin there), the same images and settings as `docker-compose.prod.yml`: images build; migrations run as the schema owner; the API runs read-only as the least-privilege role; the CLI creates a tenant and refuses `none-dev-only`; Nginx serves HTTPS with HSTS, CSP and `nosniff`, redirects HTTP to the configured domain only, rejects TLS 1.1 and unknown host names; login failures are generic; the cookie is `HttpOnly; Secure; SameSite=Strict`; a request without the CSRF header gets 403; send and receive work and the copy is saved to Sent; no password or session id appears in any container log.
 
-Not yet tested: `install.sh` and `docker compose` end to end, Let's Encrypt issue and renewal, an ARM64 build, a real server on the internet, the interface in a browser on the production stack.
+Testing add-on, same way: certificates and gate login created by `enable.sh`; test mail server healthy with mailboxes created through `setup`; Foxalora connects to it over verified TLS; the CA's name constraint makes Node and OpenSSL reject a certificate for any other name; the site, API and Mailpit answer 401 without the gate login and work with it; ACME challenges on port 80 are not gated; tester-to-tester mail is delivered and saved to Sent; outside mail lands in Mailpit; the gate password, mailbox passwords and session ids never appear in the API log.
+
+Not yet tested: `install.sh`, `enable.sh`, `tester.sh` and `gate.sh` with `docker compose` end to end, Let's Encrypt issue and renewal, an ARM64 build, a real server on the internet, the interface in a browser on the production stack.

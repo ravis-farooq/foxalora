@@ -39,7 +39,7 @@ need docker
 need openssl
 docker info >/dev/null 2>&1 || { echo "Docker is not running, or this user may not use it (try sudo)." >&2; exit 1; }
 docker compose version >/dev/null 2>&1 || { echo "Docker Compose v2 is required (the 'docker compose' plugin)." >&2; exit 1; }
-COMPOSE=(docker compose -f docker-compose.prod.yml --env-file .env)
+COMPOSE=(./compose.sh)
 
 step "Secrets"
 if [ ! -f .env ]; then
@@ -102,7 +102,7 @@ for _ in $(seq 1 60); do
   printf '.'; sleep 2
 done
 [ "$(docker inspect -f '{{.State.Health.Status}}' "$("${COMPOSE[@]}" ps -q api)" 2>/dev/null)" = healthy ] \
-  || { echo " not healthy. Check: docker compose -f deploy/docker-compose.prod.yml logs api migrate" >&2; exit 1; }
+  || { echo " not healthy. Check: ./deploy/compose.sh logs api migrate" >&2; exit 1; }
 
 step "Tenant"
 TENANTS=$("${COMPOSE[@]}" --profile tools run --rm -T cli tenant:list)
@@ -125,8 +125,9 @@ Next: tell Foxalora which mail server serves each email domain, for example
   ./deploy/cli.sh server:list ${TENANT_ID}
 (Gmail: imap.gmail.com:993:tls and smtp.gmail.com:465:tls with --saves-sent; users sign in with an app password.)
 
-Status : docker compose -f deploy/docker-compose.prod.yml ps
-Logs   : docker compose -f deploy/docker-compose.prod.yml logs -f api
-Stop   : docker compose -f deploy/docker-compose.prod.yml down
+Status : ./deploy/compose.sh ps
+Logs   : ./deploy/compose.sh logs -f api
+Stop   : ./deploy/compose.sh down
+Testers: ./deploy/testing/enable.sh   (test mail server + password gate, see docs/runbooks/install.md)
 Back up deploy/.env and the database volume.
 EOF

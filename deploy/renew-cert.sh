@@ -12,6 +12,6 @@ docker run --rm -v "$PWD/letsencrypt:/etc/letsencrypt" -v "$PWD/acme:/var/www/ac
 if ! cmp -s "letsencrypt/live/$DOMAIN/fullchain.pem" certs/fullchain.pem; then
   cp -L "letsencrypt/live/$DOMAIN/fullchain.pem" certs/fullchain.pem
   (umask 077 && cp -L "letsencrypt/live/$DOMAIN/privkey.pem" certs/privkey.pem)
-  docker compose -f docker-compose.prod.yml --env-file .env exec -T web nginx -s reload
+  ./compose.sh exec -T web nginx -s reload
   echo "$(date -u +%FT%TZ) certificate renewed and Nginx reloaded"
 fi

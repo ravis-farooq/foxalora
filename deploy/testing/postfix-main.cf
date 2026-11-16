@@ -1,0 +1,7 @@
+# Testing add-on: never deliver to the real internet. Mail for foxalora.test is delivered
+# locally; everything else goes to Mailpit (https://<domain>/mailpit/). relayhost is the
+# only next hop: if Mailpit is down, outside mail waits in the queue and is never sent directly.
+relayhost = [mailpit]:1025
+default_transport = smtp
+relay_transport = smtp
+smtp_tls_security_level = none

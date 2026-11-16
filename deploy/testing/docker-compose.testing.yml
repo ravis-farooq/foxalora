@@ -1,0 +1,65 @@
+# Testing add-on: a private test mail server, a Mailpit inbox for outside mail, and a shared
+# password gate in front of the site. Turned on by deploy/testing/enable.sh; used through
+# deploy/compose.sh. NOT for customer installs.
+#
+# testmail  Postfix + Dovecot for @foxalora.test accounts (deploy/testing/tester.sh). No host ports:
+#           only the Foxalora API can reach it, over TLS with a certificate from a private CA that is
+#           name-constrained to foxalora.test.
+# mailpit   Catches mail sent to any outside address; web inbox at https://<domain>/mailpit/ behind
+#           the gate. Nothing reaches the internet.
+services:
+  api:
+    environment:
+      NODE_EXTRA_CA_CERTS: /testing/ca.pem
+    volumes:
+      - ./testing/certs/ca.pem:/testing/ca.pem:ro
+
+  web:
+    volumes:
+      - ./testing/nginx:/etc/nginx/foxalora.d:ro
+    depends_on:
+      mailpit:
+        condition: service_started
+
+  testmail:
+    image: mailserver/docker-mailserver:16.0.1
+    hostname: mail.foxalora.test
+    networks:
+      default:
+        aliases: [mail.foxalora.test]
+    environment:
+      SSL_TYPE: manual
+      SSL_CERT_PATH: /tmp/certs/testmail-fullchain.pem
+      SSL_KEY_PATH: /tmp/certs/testmail-key.pem
+      PERMIT_DOCKER: none
+      ENABLE_SPAMASSASSIN: '0'
+      ENABLE_CLAMAV: '0'
+      ENABLE_AMAVIS: '0'
+      ENABLE_FAIL2BAN: '0'
+      ENABLE_POSTGREY: '0'
+      ENABLE_OPENDKIM: '0'
+      ENABLE_OPENDMARC: '0'
+      ENABLE_POLICYD_SPF: '0'
+      ENABLE_RSPAMD: '0'
+      ENABLE_UPDATE_CHECK: '0'
+      POSTFIX_MESSAGE_SIZE_LIMIT: '26214400'
+      LOG_LEVEL: warn
+    volumes:
+      - ./testing/certs:/tmp/certs:ro
+      - ./testing/postfix-main.cf:/tmp/docker-mailserver/postfix-main.cf:ro
+      - testmail-config:/tmp/docker-mailserver
+      - testmail-data:/var/mail
+      - testmail-state:/var/mail-state
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    environment:
+      MP_WEBROOT: mailpit
+      MP_MAX_MESSAGES: '5000'
+    restart: unless-stopped
+
+volumes:
+  testmail-config:
+  testmail-data:
+  testmail-state:

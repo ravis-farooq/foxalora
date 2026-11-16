@@ -17,3 +17,5 @@ deploy/letsencrypt/
 *.log
 .vite/
 dev/.vault-key
+deploy/testing/certs/
+deploy/testing/nginx/htpasswd
