@@ -84,8 +84,14 @@ Progress and test status: `docs/PROTOTYPE_RESULTS.md` (Phase 0), `docs/PHASE1_PR
 CSV contact import, filtered and cross-folder search, attachments on send,
 threading, IMAP IDLE/connection pooling, admin UI,
 installer wizard, i18n/RTL, SSO adapters, separate-origin email rendering,
-Docker image for the app, most tests (only backend security unit tests exist).
+most tests (only backend security unit tests exist).
 All are in the Development Backlog.
+
+## Installing on a server (test and pilot only)
+
+`./deploy/install.sh webmail.yourdomain.com --letsencrypt you@yourdomain.com` builds and starts
+Nginx, the API, PostgreSQL and Valkey with generated secrets. Full guide, including a free
+server option and how to keep a test install private: `docs/runbooks/install.md`.
 
 ## Known gaps to fix before anything beyond a demo
 

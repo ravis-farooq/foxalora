@@ -29,7 +29,7 @@ A hosting company adopts this only if three things hold, so treat them as produc
 | `docs/Foxalora-Jira-Import.csv` | Same backlog for Jira import. |
 | `README.md` | How to run the prototype. |
 | `docs/DEVELOPER_HANDOFF.md` | Onboarding for team developers: setup, test accounts, security and UX rules, decisions, how to contribute. Keep it current. |
-| `deploy/`, `backend/Dockerfile`, `frontend/Dockerfile` | Draft production install (`deploy/install.sh`, Compose, Nginx). The compose file validates, but the images were never built or run. Postgres and Redis sit behind the `phase1` profile until the backend uses them. |
+| `deploy/`, `backend/Dockerfile`, `frontend/Dockerfile` | Production install for test and pilot servers (`deploy/install.sh`, `deploy/cli.sh`, Compose with Nginx, API, PostgreSQL, Valkey; guide in `docs/runbooks/install.md`). Images built and the stack tested in production mode with plain docker on 2026-11-16; `install.sh` with Compose and Let's Encrypt not yet run on a real server. |
 | `docs/LAUNCH_KIT.md` | Go-to-market drafts. Do not publish claims marked [after v1.0] before they are true. |
 
 If two documents disagree, the PRD wins on scope and the SAD wins on design. Report the conflict instead of picking silently.
@@ -40,7 +40,7 @@ If two documents disagree, the PRD wins on scope and the SAD wins on design. Rep
 
 What exists in draft form: direct login with IMAP and SMTP verification, encrypted in-memory session vault, admin-mapped mail servers, SSRF guard with IP pinning, folder list, paged message list, message read with server-side HTML sanitization, sandboxed iframe viewer, send, flags, delete, attachment download, quick search (subject, sender, recipient), reply, reply all, forward, mark read/unread and star; contacts with search, recipient suggestions and vCard import/export; settings for display name (used in From), theme, density and time zone; rich-text signatures with up to 3 images (D-008), cleaned on save (`docs/DECISIONS.md` D-006, built ahead of Phase 2 at the product owner's request); drafts saved on close and every 30 s, delete with confirmation and Undo, Restore from Trash, confirmation dialogs, address history for suggestions, first-run guide and tooltips (D-007); folder tree with subfolders, Archive and Junk, move by menu or drag and drop, bulk actions, storage indicator (D-010); sent mail saved to Sent (D-011). Interface: icon rail, folder pane with role names and icons, paged list, labelled message toolbar, toasts, light and dark themes, phone layout with folder drawer and back button (plain CSS with tokens, `docs/DECISIONS.md` D-005). Development runs against Postfix + Dovecot with real TLS (`dev/up.sh`); GreenMail is kept for fast automated tests only.
 
-What does not exist: CSV contact import, language and other preferences beyond the four above, filtered or cross-folder search, attachment upload, threading, IDLE, connection pooling, admin UI, installer, i18n/RTL, SSO, separate render origin, application Docker image, frontend tests.
+What does not exist: CSV contact import, language and other preferences beyond the four above, filtered or cross-folder search, attachment upload, threading, IDLE, connection pooling, admin UI, setup wizard (the shell installer exists), i18n/RTL, SSO, separate render origin, frontend tests.
 
 ## 4. Non-negotiable rules
 

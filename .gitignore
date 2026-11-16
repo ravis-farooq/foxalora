@@ -9,6 +9,8 @@ dev/mailservers/certs/
 deploy/mail-servers.json
 deploy/certs/
 deploy/.env
+deploy/acme/
+deploy/letsencrypt/
 
 # OS and editor files
 .DS_Store

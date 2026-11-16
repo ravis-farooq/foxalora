@@ -1,58 +1,119 @@
-# Production-style stack (draft, not yet built or run).
-# Start with:  ./deploy/install.sh mail.yourdomain.com
+# Foxalora production stack: Nginx (TLS) -> API -> PostgreSQL + Valkey.
+# Install with:  ./deploy/install.sh webmail.yourdomain.com
+# Secrets come from deploy/.env, which install.sh generates (never commit it).
+name: foxalora
+
+x-api-image: &api-image
+  image: foxalora-api:local
+  build:
+    context: ..
+    dockerfile: backend/Dockerfile
+
 services:
   web:
+    image: foxalora-web:local
     build:
       context: ..
       dockerfile: frontend/Dockerfile
     environment:
-      DOMAIN: ${DOMAIN}
+      DOMAIN: ${DOMAIN:?run install.sh first}
     volumes:
       - ./certs:/certs:ro
+      - ./acme:/var/www/acme:ro # Let's Encrypt HTTP-01 challenges (renew-cert.sh)
     ports:
       - "80:80"
       - "443:443"
     depends_on:
-      - app
+      api:
+        condition: service_started
     restart: unless-stopped
 
-  app:
-    build:
-      context: ..
-      dockerfile: backend/Dockerfile
+  api:
+    <<: *api-image
     environment:
       NODE_ENV: production
       PORT: "3000"
-      SESSION_KEY: ${SESSION_KEY}
-      MAIL_SERVERS_FILE: /config/mail-servers.json
+      DATABASE_URL: postgres://foxalora_app:${APP_DB_PASSWORD:?}@postgres:5432/foxalora
+      VALKEY_URL: redis://:${VALKEY_PASSWORD:?}@valkey:6379
+      FOXALORA_VAULT_KEYS: ${VAULT_KEYS:?}
+      ALLOWED_HOSTS: ${DOMAIN}
       SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-30}
       SESSION_MAX_HOURS: ${SESSION_MAX_HOURS:-12}
-    volumes:
-      - ./mail-servers.json:/config/mail-servers.json:ro
     expose:
       - "3000"
     read_only: true
     tmpfs:
       - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
     restart: unless-stopped
 
-  # The services below are NOT used by prototype v0.1 (sessions are in memory, no database yet).
-  # They start with:  docker compose --profile phase1 up -d   once Phase 1 of CLAUDE.md is built.
+  # One-shot: applies database migrations as the schema owner, then exits.
+  migrate:
+    <<: *api-image
+    command: ["node", "dist/cli.js", "migrate"]
+    environment:
+      NODE_ENV: production
+      DATABASE_OWNER_URL: postgres://foxalora:${POSTGRES_PASSWORD:?}@postgres:5432/foxalora
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # Operator CLI, started on demand by deploy/cli.sh (never runs on its own).
+  cli:
+    <<: *api-image
+    profiles: ["tools"]
+    entrypoint: ["node", "dist/cli.js"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://foxalora_app:${APP_DB_PASSWORD:?}@postgres:5432/foxalora
+      DATABASE_OWNER_URL: postgres://foxalora:${POSTGRES_PASSWORD:?}@postgres:5432/foxalora
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   postgres:
-    image: postgres:16-alpine
-    profiles: ["phase1"]
+    image: postgres:18.6-alpine
     environment:
       POSTGRES_DB: foxalora
-      POSTGRES_USER: foxalora
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: foxalora # schema owner, used only for migrations and the CLI
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      FOXALORA_APP_DB_PASSWORD: ${APP_DB_PASSWORD:?}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ./db/01-app-role.sh:/docker-entrypoint-initdb.d/01-app-role.sh:ro
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "foxalora", "-d", "foxalora"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
     restart: unless-stopped
 
-  redis:
-    image: redis:7-alpine
-    profiles: ["phase1"]
-    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+  # Session vault, login throttling. Nothing is written to disk: mailbox passwords
+  # (encrypted) never reach storage, and a restart only signs users out.
+  valkey:
+    image: valkey/valkey:9.0.7-alpine
+    command: ["valkey-server", "--requirepass", "${VALKEY_PASSWORD:?}", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli -a \"$$VALKEY_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    environment:
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD:?}
     restart: unless-stopped
 
 volumes:

@@ -73,7 +73,7 @@ frontend/               React 19 + Vite (TypeScript), plain CSS with design toke
   src/editor/           the email editor (Tiptap), made email-safe
   src/ui/               shared pieces: icons, toasts, confirm dialog, tooltips, theme
 dev/                    one-command dev stack, test mail servers, test certificates
-deploy/                 production install draft (Docker Compose, Nginx) - not finished
+deploy/                 production install: install.sh, cli.sh, Compose stack, Nginx (docs/runbooks/install.md)
 docs/                   PRD, decisions, backlog, progress notes, this page
 ```
 
@@ -133,7 +133,7 @@ Full reasons, security and operational impact are in `docs/DECISIONS.md`.
 | 2. Core mail (folders, viewer, composer, attachments, search) | In progress |
 | 3. Contacts, settings, admin console | Contacts and settings done early; admin console not started |
 | 4. Interface quality (mobile, WCAG, Arabic RTL) | Partly done |
-| 5. SSO, Docker image, installer, monitoring | Not started |
+| 5. SSO, Docker image, installer, monitoring | Docker images, Compose stack and shell installer done for test installs; SSO, setup wizard, monitoring not started |
 | 6. Security verification and release | Not started |
 
 Working today: sign-in, folders with roles and counts, paged list, search (subject, sender, recipient), reading with safe HTML, reply / reply all / forward, delete with confirmation and Undo, restore from Trash, folders inside folders (create, rename, delete), Archive and Junk, move by menu or drag and drop, select several messages and act on them together, storage indicator, sent mail kept in Sent, mark read/unread/star, drafts (save on close, autosave, continue, discard), contacts with suggestions and vCard, settings (name, theme, density, time zone, address history), signatures with images, first-run guide, tooltips, phone layout, light and dark themes.
