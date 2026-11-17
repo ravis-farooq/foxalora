@@ -95,6 +95,18 @@ export interface AuditEventsTable {
   hash: ColumnType<Buffer | null, Buffer | null | undefined, never>;
 }
 
+export interface AdminUsersTable {
+  id: Generated<string>;
+  tenant_id: string;
+  email: string;
+  password_hash: string;
+  role: ColumnType<'owner' | 'admin', 'owner' | 'admin' | undefined, 'owner' | 'admin'>;
+  totp_secret: ColumnType<unknown | null, string | null | undefined, string | null>;
+  last_login_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
+  created_at: CreatedAt;
+  updated_at: UpdatedAt;
+}
+
 export interface Database {
   tenants: TenantsTable;
   mail_servers: MailServersTable;
@@ -106,4 +118,5 @@ export interface Database {
   recent_recipients: RecentRecipientsTable;
   system_settings: SystemSettingsTable;
   audit_events: AuditEventsTable;
+  admin_users: AdminUsersTable;
 }

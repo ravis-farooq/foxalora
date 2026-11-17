@@ -1,0 +1,70 @@
+/* First-run setup wizard (FOX-099). Uses the app's design tokens (D-005). */
+.setup-page { min-height: 100%; display: grid; place-items: start center; padding: 40px 16px; background: radial-gradient(1200px 500px at 50% -10%, var(--accent-soft), transparent 70%), var(--bg); }
+.setup-card { width: 100%; max-width: 620px; display: grid; gap: 16px; padding: 28px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+.setup-card h1 { margin: 0; font-size: 21px; outline: none; }
+.setup-card p { margin: 0; }
+.setup-card code { font-size: 12.5px; padding: 1px 5px; border-radius: 4px; background: var(--hover); word-break: break-all; }
+.setup-head { display: flex; align-items: center; gap: 12px; }
+.setup-product { font-weight: 700; font-size: 16px; }
+
+.setup-steps { display: flex; gap: 4px; margin: 4px 0 0; padding: 0; list-style: none; counter-reset: none; }
+.setup-steps li { flex: 1; display: grid; justify-items: center; gap: 4px; font-size: 12px; color: var(--muted); position: relative; }
+.setup-steps li::before { content: ""; position: absolute; top: 13px; right: 50%; width: 100%; height: 2px; background: var(--line); z-index: 0; }
+.setup-steps li:first-child::before { display: none; }
+.setup-steps li.done::before, .setup-steps li.current::before { background: var(--accent); }
+.setup-steps .dot { position: relative; z-index: 1; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--line); background: var(--surface); font-weight: 600; }
+.setup-steps .dot svg { width: 15px; height: 15px; }
+.setup-steps li.done .dot { background: var(--accent); border-color: var(--accent); color: #fff; }
+.setup-steps li.current .dot { border-color: var(--accent); color: var(--accent-text); }
+.setup-steps li.current { color: var(--text); font-weight: 600; }
+
+.setup-form { display: grid; gap: 14px; }
+.setup-form label { display: grid; gap: 6px; font-size: 13px; font-weight: 500; }
+.setup-form label.check { display: flex; align-items: center; gap: 8px; font-weight: 400; }
+.setup-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.setup-advanced summary { cursor: pointer; font-size: 13px; font-weight: 500; }
+.setup-advanced[open] { display: grid; gap: 10px; }
+.setup-test { display: grid; gap: 10px; margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: 10px; }
+.setup-test legend { padding: 0 6px; font-size: 13px; font-weight: 600; }
+.setup-test > button { justify-self: start; }
+
+.setup-checks { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.setup-checks li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.setup-checks .status { flex-shrink: 0; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; color: #fff; }
+.setup-checks .status svg { width: 14px; height: 14px; }
+.setup-checks li.ok .status { background: #2e7d32; }
+.setup-checks li.warn .status { background: #b26a00; }
+.setup-checks li.fail .status { background: var(--danger); }
+.setup-checks li.fail { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
+
+.setup-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 4px; }
+.setup-actions .ghost { padding: 9px 16px; }
+.setup-card .notice { margin: 0; }
+
+.setup-review { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 0; font-size: 13.5px; }
+.setup-review dt { color: var(--muted); }
+.setup-review dd { margin: 0; word-break: break-word; }
+
+.setup-success { display: flex; gap: 10px; align-items: center; padding: 12px; border-radius: 8px; color: #1b5e20; background: color-mix(in srgb, #2e7d32 12%, transparent); }
+:root[data-theme="dark"] .setup-success { color: #9ee6a3; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .setup-success { color: #9ee6a3; } }
+.setup-success svg { flex-shrink: 0; }
+.setup-url { font-size: 16px; font-weight: 600; word-break: break-all; }
+.setup-list { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.button-link { display: inline-block; justify-self: start; padding: 9px 16px; border: 1px solid var(--line); border-radius: 8px; color: inherit; text-decoration: none; }
+.button-link.primary { border: 0; background: var(--accent); color: #fff; font-weight: 600; }
+.button-link.primary:hover { background: var(--accent-hover); }
+
+@media (max-width: 560px) {
+  .setup-page { padding: 16px; }
+  .setup-card { padding: 20px 16px; }
+  .setup-steps .label { display: none; }
+  .setup-steps li.current .label { display: block; }
+}
+.setup-url a { color: var(--accent-text); }
+.setup-hint { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--accent-soft); }
+.setup-hint p { margin: 0; font-size: 13px; }
+.setup-hint > button { justify-self: start; }
+.setup-skip { align-items: flex-start !important; color: var(--danger); }
+.setup-skip input { margin-top: 3px; }
+.setup-review dd.setup-failed { color: var(--danger); font-weight: 600; }

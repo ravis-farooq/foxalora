@@ -61,6 +61,8 @@ done
 
 step "Registering the test mail server in Foxalora"
 TENANT_ID=$(../cli.sh tenant:list | head -1 | awk '{print $1}')
+# Before the setup wizard has run there is no tenant yet; the wizard adopts this one later.
+[ -n "$TENANT_ID" ] || TENANT_ID=$(../cli.sh tenant:create Default | tail -1)
 if ../cli.sh server:list "$TENANT_ID" | grep -q '^testmail:'; then
   echo "Already registered."
 else

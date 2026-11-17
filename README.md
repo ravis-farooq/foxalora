@@ -83,7 +83,7 @@ Progress and test status: `docs/PROTOTYPE_RESULTS.md` (Phase 0), `docs/PHASE1_PR
 
 CSV contact import, filtered and cross-folder search, attachments on send,
 threading, IMAP IDLE/connection pooling, admin UI,
-installer wizard, i18n/RTL, SSO adapters, separate-origin email rendering,
+admin console (the setup wizard exists), i18n/RTL, SSO adapters, separate-origin email rendering,
 most tests (only backend security unit tests exist).
 All are in the Development Backlog.
 

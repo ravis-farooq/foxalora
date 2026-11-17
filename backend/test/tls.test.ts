@@ -3,7 +3,8 @@ import { createServer as createNetServer, type AddressInfo, type Server } from '
 import { join } from 'node:path';
 import { createServer as createTlsServer } from 'node:tls';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openImap } from '../src/mail/connections';
+import { loginFailureReason } from '../src/auth/login-reason';
+import { openImap, probeServer } from '../src/mail/connections';
 import type { MailServer } from '../src/registry/registry.service';
 
 const dir = process.env.FOXALORA_TEST_CERTS_DIR!;
@@ -101,6 +102,31 @@ describe('SSRF guard on real connections (FOX-025)', () => {
     const { port, received } = await tlsImap('valid.pem', 'valid-key.pem');
     const r = await openImap({ email: 'u@x', password: 'p', server: { ...server(port), allowPrivate: false } }).catch((e) => e);
     expect(r.code).toBe('SSRF_BLOCKED');
+    expect(received).toEqual([]);
+  });
+});
+
+describe('setup wizard connection test (FOX-099)', () => {
+  const closedPort = async () => { const p = await listen(createNetServer()); await new Promise((r) => servers.pop()!.close(r)); return p; };
+
+  it('without a test mailbox: passes after TLS and sends no login', async () => {
+    const { port, received } = await tlsImap('valid.pem', 'valid-key.pem');
+    const r = await probeServer({ ...server(port), smtpPort: await closedPort() }, undefined, loginFailureReason);
+    expect(r.imap).toEqual({ ok: true });
+    expect(r.smtp).toEqual({ ok: false, reason: 'ESOCKET' }); // nodemailer's code for a refused connection
+    expect(received.some((l) => /LOGIN|AUTHENTICATE/i.test(l))).toBe(false);
+  });
+
+  it('with a test mailbox: reports the refused login as a safe reason token', async () => {
+    const { port } = await tlsImap('valid.pem', 'valid-key.pem');
+    const r = await probeServer(server(port), { user: 'u@x.example', pass: 'canary-password' }, loginFailureReason);
+    expect(r.imap).toEqual({ ok: false, reason: 'imap_auth:AUTHENTICATIONFAILED' });
+  });
+
+  it('names certificate problems, with or without a test mailbox', async () => {
+    const { port, received } = await tlsImap('wrongname.pem', 'wrongname-key.pem');
+    const r = await probeServer(server(port), undefined, loginFailureReason);
+    expect(r.imap).toEqual({ ok: false, reason: 'ERR_TLS_CERT_ALTNAME_INVALID' });
     expect(received).toEqual([]);
   });
 });

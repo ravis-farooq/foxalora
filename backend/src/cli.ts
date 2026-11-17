@@ -1,5 +1,6 @@
 /* Operator CLI. The admin console (Phase 3) will cover the same operations. */
 import 'reflect-metadata';
+import { sql } from 'kysely';
 import { AuditService } from './audit/audit.service';
 import { requireEnv } from './common/tokens';
 import { createDb, migrateToLatest } from './database/database';
@@ -20,6 +21,7 @@ const USAGE = `Usage: node dist/cli.js <command>
   server:saves-sent <tenantId> <name> on|off  whether the server keeps its own copy of sent mail (DATABASE_URL)
   domain:map <tenantId> <domain> <serverName>   map an email domain to a server (DATABASE_URL)
   server:list <tenantId>                    show a tenant's servers and domains (DATABASE_URL)
+  setup:status                              "open" until the setup wizard has created the first administrator (DATABASE_URL)
   seed:dev                                  development tenant for the local test servers (both URLs)
   seed:mail [--force]                       sample messages for carol@ and dave@dovecot.test (DATABASE_URL,
                                             NODE_EXTRA_CA_CERTS=dev/mailservers/certs/ca.pem); skipped if mail exists
@@ -147,6 +149,13 @@ async function main(argv: string[]) {
         for (const d of domains.filter((x) => x.mail_server_id === s.id)) out(`    ${d.domain}`);
       }
       await db.destroy();
+      return;
+    }
+    case 'setup:status': {
+      const db = createDb(requireEnv('DATABASE_URL'), 1);
+      const r = await sql<{ open: boolean }>`SELECT setup_is_open() AS open`.execute(db);
+      await db.destroy();
+      out(r.rows[0]?.open ? 'open' : 'done');
       return;
     }
     case 'seed:dev': {

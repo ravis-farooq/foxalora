@@ -18,6 +18,8 @@ import { MailService } from './mail/mail.service';
 import { PreferencesController } from './preferences/preferences.controller';
 import { PreferencesService } from './preferences/preferences.service';
 import { RegistryService } from './registry/registry.service';
+import { SetupController } from './setup/setup.controller';
+import { SetupService } from './setup/setup.service';
 
 /** Connects at start-up and fails fast if Valkey is unreachable, so the first request never races the connection. */
 async function createValkey(): Promise<Redis> {
@@ -44,7 +46,7 @@ class Shutdown implements OnApplicationShutdown {
 }
 
 @Module({
-  controllers: [AuthController, MailController, ContactsController, PreferencesController],
+  controllers: [AuthController, MailController, ContactsController, PreferencesController, SetupController],
   providers: [
     // Runtime role (foxalora_app): always subject to row-level security.
     { provide: DB, useFactory: () => createDb(requireEnv('DATABASE_URL')) },
@@ -59,6 +61,7 @@ class Shutdown implements OnApplicationShutdown {
     ContactsService,
     RecipientsService,
     PreferencesService,
+    SetupService,
     Shutdown,
   ],
 })

@@ -37,6 +37,8 @@ services:
       VALKEY_URL: redis://:${VALKEY_PASSWORD:?}@valkey:6379
       FOXALORA_VAULT_KEYS: ${VAULT_KEYS:?}
       ALLOWED_HOSTS: ${DOMAIN}
+      # Opens the browser setup wizard until the first administrator exists (FOX-099/100).
+      FOXALORA_SETUP_TOKEN: ${SETUP_TOKEN:-}
       SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-30}
       SESSION_MAX_HOURS: ${SESSION_MAX_HOURS:-12}
     expose:

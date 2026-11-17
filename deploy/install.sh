@@ -8,7 +8,8 @@
 # Needs: a Linux server with Docker and Docker Compose v2, ports 80 and 443 open, and the domain's
 # DNS A record pointing at this server (for --letsencrypt).
 # What it does: creates deploy/.env with fresh random secrets, gets a TLS certificate, builds and
-# starts the stack (Nginx, API, PostgreSQL, Valkey), runs migrations and creates the first tenant.
+# starts the stack (Nginx, API, PostgreSQL, Valkey), runs migrations, and prints the link to the
+# setup wizard, where the company, administrator, mail server and domains are entered in the browser.
 # Safe to run again: secrets, certificates and data are kept.
 set -euo pipefail
 START=$(date +%s)
@@ -53,6 +54,8 @@ POSTGRES_PASSWORD=$(openssl rand -hex 24)
 APP_DB_PASSWORD=$(openssl rand -hex 24)
 VALKEY_PASSWORD=$(openssl rand -hex 24)
 VAULT_KEYS=k1:$(openssl rand -base64 32)
+# One-time key for the browser setup wizard (/setup). Useless once setup is done.
+SETUP_TOKEN=$(openssl rand -hex 32)
 SESSION_IDLE_MINUTES=30
 SESSION_MAX_HOURS=12
 EOF
@@ -65,6 +68,8 @@ else
     exit 1
   fi
   echo "deploy/.env already exists; keeping it."
+  # Installs from before the setup wizard: add its token.
+  grep -q '^SETUP_TOKEN=' .env || echo "SETUP_TOKEN=$(openssl rand -hex 32)" >> .env
 fi
 
 step "TLS certificate"
@@ -104,26 +109,27 @@ done
 [ "$(docker inspect -f '{{.State.Health.Status}}' "$("${COMPOSE[@]}" ps -q api)" 2>/dev/null)" = healthy ] \
   || { echo " not healthy. Check: ./deploy/compose.sh logs api migrate" >&2; exit 1; }
 
-step "Tenant"
-TENANTS=$("${COMPOSE[@]}" --profile tools run --rm -T cli tenant:list)
-if [ -z "$TENANTS" ]; then
-  TENANT_ID=$("${COMPOSE[@]}" --profile tools run --rm -T cli tenant:create "Default" | tail -1)
-  echo "Created tenant $TENANT_ID"
+step "Setup"
+SETUP=$("${COMPOSE[@]}" --profile tools run --rm -T cli setup:status | tail -1)
+if [ "$SETUP" = open ]; then
+  NEXT="Next: open the setup wizard in your browser and follow the steps (company, administrator,
+mail server with a connection test, email domains). The link works until setup is finished:
+
+  https://${DOMAIN}/setup#token=$(sed -n 's/^SETUP_TOKEN=//p' .env)
+
+Keep this link private: whoever opens it first can set up this server."
 else
-  TENANT_ID=$(echo "$TENANTS" | head -1 | awk '{print $1}')
-  echo "Tenant exists: $TENANT_ID"
+  NEXT="Setup was completed earlier; the setup wizard is locked.
+Mail servers and domains: ./deploy/cli.sh server:list <tenantId>   (tenant ids: ./deploy/cli.sh tenant:list)"
 fi
+echo "$SETUP"
 
 MINUTES=$(( ($(date +%s) - START + 59) / 60 ))
 cat <<EOF
 
 Foxalora is running at https://${DOMAIN}   (install took about ${MINUTES} min)
 
-Next: tell Foxalora which mail server serves each email domain, for example
-  ./deploy/cli.sh server:add ${TENANT_ID} main --imap mail.example.com:993:tls --smtp mail.example.com:465:tls
-  ./deploy/cli.sh domain:map ${TENANT_ID} example.com main
-  ./deploy/cli.sh server:list ${TENANT_ID}
-(Gmail: imap.gmail.com:993:tls and smtp.gmail.com:465:tls with --saves-sent; users sign in with an app password.)
+${NEXT}
 
 Status : ./deploy/compose.sh ps
 Logs   : ./deploy/compose.sh logs -f api

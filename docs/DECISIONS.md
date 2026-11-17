@@ -234,3 +234,29 @@ Short records of project decisions, including deviations from the PRD or SAD (CL
 
 **Operational impact**
 - Run migrations (0004). When mapping Gmail or Microsoft 365, add `--saves-sent`.
+
+## D-012 Browser setup wizard with a one-time token (FOX-099, FOX-100)
+
+- **Date:** 2026-11-16
+- **Decided by:** product owner ("we have to give them install wizard like roundcube"), built ahead of Phase 5
+- **Decision:**
+  - Like Roundcube's installer: check the environment, enter the settings, test the mail server, then the installer is gone. Unlike Roundcube, nothing has to be deleted by hand: the wizard locks itself.
+  - `deploy/install.sh` still starts the stack (secrets, certificate, containers, migrations). It also writes `SETUP_TOKEN` (256-bit random) to `deploy/.env`, passes it to the API as `FOXALORA_SETUP_TOKEN`, and prints `https://DOMAIN/setup#token=...`. It no longer creates a tenant; the wizard does.
+  - Steps: environment checks, company and first administrator, mail server with a connection test (optional test mailbox), domains, review. "Finish" writes tenant, administrator, server, domains and audit entries in one transaction.
+  - New table `admin_users` (migration 0005) with row-level security; passwords hashed with scrypt (N=2^17, r=8, p=1). Two `SECURITY DEFINER` functions, `setup_is_open()` and `setup_bootstrap()`, are the only cross-tenant paths and work only while no administrator exists. An install configured earlier with the CLI (one tenant) is adopted; with several tenants the wizard refuses.
+  - CLI `setup:status` prints `open` or `done`.
+
+**Deviations from the backlog**
+- FOX-099 lists "database" and "HTTPS status" as wizard inputs. The Docker installer already creates and secures the database (generated passwords, least-privilege runtime role), so the wizard only checks it; asking for database details would add a step that can only go wrong. HTTPS is checked, not configured. Branding (FOX-082) and default mail settings are left for the admin console.
+- Administrator two-step verification (FOX-134) and the admin login itself (FOX-081) are not built yet; the wizard creates the owner account they will use.
+
+**Security impact**
+- Every `/api/v1/setup` route answers 404 unless the token matches (constant-time comparison of SHA-256 digests) and no administrator exists; a finished install cannot be told apart from one without a wizard. Writes also need the CSRF header.
+- The token travels in the URL fragment (not sent to the server, not in access logs) and then in a header. It becomes useless after setup.
+- The connection test uses the mail adapter with the same SSRF guard, TLS 1.2+ and certificate checks as logins, and only standard mail ports. Failure reasons are fixed tokens (error codes, TLS codes), never server text. The test mailbox password is used once and not stored or logged.
+- The administrator password is only stored as a scrypt hash. scrypt from Node's crypto module avoids a new dependency; Argon2id would need a native package.
+- Tests: `test/setup.e2e.test.ts` (invisible without token, lock after finish, rollback, simultaneous finishes, no secrets in logs or responses, SSRF on the connection test), `test/setup-unit.test.ts`, probe cases in `test/tls.test.ts`.
+
+**Operational impact**
+- Run migrations (0005). Existing installs: rerunning `install.sh` adds `SETUP_TOKEN` to `deploy/.env` and prints the link if no administrator exists yet.
+- Lost link: `grep SETUP_TOKEN deploy/.env`. Re-running the wizard after it is finished requires removing the administrator from the database (file-system and database access), as FOX-100 requires.

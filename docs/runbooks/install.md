@@ -42,11 +42,32 @@ cd /opt/foxalora
 ./deploy/install.sh webmail.yourdomain.com --letsencrypt you@yourdomain.com
 ```
 
-The installer generates `deploy/.env` with random secrets, gets the certificate, builds the images (a few minutes on the first run), starts Nginx, the API, PostgreSQL and Valkey, runs migrations, creates the first tenant and prints its id. It can be run again safely.
+The installer generates `deploy/.env` with random secrets, gets the certificate, builds the images (a few minutes on the first run), starts Nginx, the API, PostgreSQL and Valkey, runs migrations, and prints a **setup link**:
 
-Then map your email domain to its mail server (use the tenant id the installer printed):
+```
+https://webmail.yourdomain.com/setup#token=<64 hex characters>
+```
+
+It can be run again safely; it prints the link again while setup is not finished.
+
+## 4a. Setup wizard (in the browser)
+
+Open the setup link. The wizard has five steps:
+
+1. **Check**: HTTPS, database, session store, encryption key, production mode and site address. Continue is blocked while a check fails.
+2. **Administrator**: company name, administrator email and password (at least 12 characters). This account is for the admin console, not for reading mail.
+3. **Mail server**: the IMAP and SMTP host and security (SSL/TLS 993 or STARTTLS 143; SSL/TLS 465 or STARTTLS 587/25). **Test connection** checks the connection, TLS and certificate; with an optional test mailbox it also checks the login (the test password is used once and not stored). Advanced: "Mail server is on a private network" (only if it really is), "The server saves sent mail itself" (Gmail, Microsoft 365).
+4. **Domains**: the email domains whose users sign in through this server, one per line.
+5. **Review and finish**: everything is saved in one step; if anything fails, nothing is saved.
+
+After finishing, the setup page answers "not found" for good, with or without the token. Customers sign in at `https://webmail.yourdomain.com`.
+
+- Keep the setup link private until setup is done: whoever opens it first sets up the server.
+- Lost the link: `grep SETUP_TOKEN deploy/.env`, then open `https://webmail.yourdomain.com/setup#token=` followed by the value.
+- More servers and domains later (until the admin console exists), with the CLI:
 
 ```bash
+./deploy/cli.sh tenant:list
 ./deploy/cli.sh server:add <tenantId> main --imap mail.yourdomain.com:993:tls --smtp mail.yourdomain.com:465:tls
 ./deploy/cli.sh domain:map <tenantId> yourdomain.com main
 ./deploy/cli.sh server:list <tenantId>
@@ -56,7 +77,7 @@ Then map your email domain to its mail server (use the tenant id the installer p
 - Gmail: `--imap imap.gmail.com:993:tls --smtp smtp.gmail.com:465:tls --saves-sent`, map `gmail.com`; users sign in with an app password.
 - Unencrypted connections (`none-dev-only`) are refused in production.
 
-Open `https://webmail.yourdomain.com` and sign in with a mailbox on that domain. **Write down how long the install took** (adoption target: 15 minutes).
+Sign in at `https://webmail.yourdomain.com` with a mailbox on one of the domains. **Write down how long the install took** (adoption target: 15 minutes).
 
 Certificate renewal (daily; it renews only when needed):
 
@@ -128,4 +149,6 @@ On a development machine with plain `docker` (no Compose plugin there), the same
 
 Testing add-on, same way: certificates and gate login created by `enable.sh`; test mail server healthy with mailboxes created through `setup`; Foxalora connects to it over verified TLS; the CA's name constraint makes Node and OpenSSL reject a certificate for any other name; the site, API and Mailpit answer 401 without the gate login and work with it; ACME challenges on port 80 are not gated; tester-to-tester mail is delivered and saved to Sent; outside mail lands in Mailpit; the gate password, mailbox passwords and session ids never appear in the API log.
 
-Not yet tested: `install.sh`, `enable.sh`, `tester.sh` and `gate.sh` with `docker compose` end to end, Let's Encrypt issue and renewal, an ARM64 build, a real server on the internet, the interface in a browser on the production stack.
+Setup wizard (2026-11-16), on a fresh production-mode stack with plain `docker` and an empty database, driven in headless Chrome: all six checks green; 404 without or with a wrong token; the connection test refused 127.0.0.1 and 10.1.2.3 (SSRF) with a plain explanation and passed against imap.gmail.com:993 and smtp.gmail.com:465 (TLS and certificate, no login); finishing created the tenant, the owner (scrypt hash), the server, the domain and audit entries; afterwards every setup route returned 404 and the page showed "Setup is not available"; no password or token in the API log; phone layout checked.
+
+Not yet tested: `install.sh` (including the new setup link), `enable.sh`, `tester.sh` and `gate.sh` with `docker compose` end to end, Let's Encrypt issue and renewal, an ARM64 build, a real server on the internet, the wizard's connection test with a real test mailbox login.

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { sql, type Kysely } from 'kysely';
+import { sql, type Kysely, type Transaction } from 'kysely';
 import { AuditService } from '../audit/audit.service';
 import { DB } from '../common/tokens';
 import type { Database, TlsPolicy } from '../database/schema';
@@ -32,6 +32,13 @@ const toServer = (r: ServerRow): MailServer => ({
 });
 
 const DOMAIN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+
+/** Lower-cased email domain, or ServerValidationError. */
+export function normalizeDomain(input: unknown): string {
+  const domain = String(input ?? '').trim().toLowerCase();
+  if (!DOMAIN.test(domain) || domain.length > 253) throw new ServerValidationError(`domain "${domain.slice(0, 60)}" is invalid`);
+  return domain;
+}
 
 /**
  * Admin-managed mail server registry (FOX-006/007). Users never supply a server:
@@ -67,16 +74,19 @@ export class RegistryService {
 
   async createServer(tenantId: string, input: ServerInput, actor: string): Promise<MailServer> {
     const s = validateServerInput(input, { production: isProduction() });
-    return this.tenantDb.run({ tenantId }, async (trx) => {
-      const row = await trx.insertInto('mail_servers').values({
-        tenant_id: tenantId, name: s.name, imap_host: s.imapHost, imap_port: s.imapPort, imap_tls: s.imapTls,
-        smtp_host: s.smtpHost, smtp_port: s.smtpPort, smtp_tls: s.smtpTls, allow_private: s.allowPrivate, saves_sent: s.savesSent === true,
-      }).returningAll().executeTakeFirstOrThrow();
-      await this.audit.insert(trx, tenantId, 'registry.server_created', actor, {
-        server: s.name, imap: `${s.imapHost}:${s.imapPort}/${s.imapTls}`, smtp: `${s.smtpHost}:${s.smtpPort}/${s.smtpTls}`, allowPrivate: s.allowPrivate, savesSent: s.savesSent === true,
-      });
-      return toServer(row);
+    return this.tenantDb.run({ tenantId }, (trx) => this.insertServer(trx, tenantId, s, actor));
+  }
+
+  /** Inside an existing tenant transaction (setup wizard). `s` must come from validateServerInput. */
+  async insertServer(trx: Transaction<Database>, tenantId: string, s: ServerInput, actor: string): Promise<MailServer> {
+    const row = await trx.insertInto('mail_servers').values({
+      tenant_id: tenantId, name: s.name, imap_host: s.imapHost, imap_port: s.imapPort, imap_tls: s.imapTls,
+      smtp_host: s.smtpHost, smtp_port: s.smtpPort, smtp_tls: s.smtpTls, allow_private: s.allowPrivate, saves_sent: s.savesSent === true,
+    }).returningAll().executeTakeFirstOrThrow();
+    await this.audit.insert(trx, tenantId, 'registry.server_created', actor, {
+      server: s.name, imap: `${s.imapHost}:${s.imapPort}/${s.imapTls}`, smtp: `${s.smtpHost}:${s.smtpPort}/${s.smtpTls}`, allowPrivate: s.allowPrivate, savesSent: s.savesSent === true,
     });
+    return toServer(row);
   }
 
   /** Marks whether a server keeps its own copy of sent mail (OPEN-4). */
@@ -89,14 +99,18 @@ export class RegistryService {
   }
 
   async mapDomain(tenantId: string, domainInput: string, serverName: string, actor: string): Promise<void> {
-    const domain = String(domainInput ?? '').trim().toLowerCase();
-    if (!DOMAIN.test(domain) || domain.length > 253) throw new ServerValidationError('domain is invalid');
+    const domain = normalizeDomain(domainInput);
     await this.tenantDb.run({ tenantId }, async (trx) => {
       const server = await trx.selectFrom('mail_servers').select('id').where('name', '=', serverName).executeTakeFirst();
       if (!server) throw new ServerValidationError(`no server named "${serverName}" in this tenant`);
-      await trx.insertInto('domain_mappings').values({ tenant_id: tenantId, domain, mail_server_id: server.id }).execute();
-      await this.audit.insert(trx, tenantId, 'registry.domain_mapped', actor, { domain, server: serverName });
+      await this.insertDomain(trx, tenantId, domain, { id: server.id, name: serverName }, actor);
     });
+  }
+
+  /** Inside an existing tenant transaction. `domain` must come from normalizeDomain. */
+  async insertDomain(trx: Transaction<Database>, tenantId: string, domain: string, server: { id: string; name: string }, actor: string) {
+    await trx.insertInto('domain_mappings').values({ tenant_id: tenantId, domain, mail_server_id: server.id }).execute();
+    await this.audit.insert(trx, tenantId, 'registry.domain_mapped', actor, { domain, server: server.name });
   }
 
   async listServers(tenantId: string) {
