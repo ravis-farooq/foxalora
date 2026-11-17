@@ -143,7 +143,7 @@ Before a server exists, `./deploy/testing/quick-tunnel.sh up` runs the same stac
 
 What is stored: PostgreSQL holds tenants, mail server settings, contacts, preferences, signatures and audit events, never mail or mailbox passwords. Valkey holds encrypted sessions in memory only; restarting it signs users out.
 
-## 7. Tested so far (2026-11-16)
+## 7. Tested so far (2026-11-16, 2026-11-17)
 
 On a development machine with plain `docker` (no Compose plugin there), the same images and settings as `docker-compose.prod.yml`: images build; migrations run as the schema owner; the API runs read-only as the least-privilege role; the CLI creates a tenant and refuses `none-dev-only`; Nginx serves HTTPS with HSTS, CSP and `nosniff`, redirects HTTP to the configured domain only, rejects TLS 1.1 and unknown host names; login failures are generic; the cookie is `HttpOnly; Secure; SameSite=Strict`; a request without the CSRF header gets 403; send and receive work and the copy is saved to Sent; no password or session id appears in any container log.
 
@@ -151,4 +151,6 @@ Testing add-on, same way: certificates and gate login created by `enable.sh`; te
 
 Setup wizard (2026-11-16), on a fresh production-mode stack with plain `docker` and an empty database, driven in headless Chrome: all six checks green; 404 without or with a wrong token; the connection test refused 127.0.0.1 and 10.1.2.3 (SSRF) with a plain explanation and passed against imap.gmail.com:993 and smtp.gmail.com:465 (TLS and certificate, no login); finishing created the tenant, the owner (scrypt hash), the server, the domain and audit entries; afterwards every setup route returned 404 and the page showed "Setup is not available"; no password or token in the API log; phone layout checked.
 
-Not yet tested: `install.sh` (including the new setup link), `enable.sh`, `tester.sh` and `gate.sh` with `docker compose` end to end, Let's Encrypt issue and renewal, an ARM64 build, a real server on the internet, the wizard's connection test with a real test mailbox login.
+Fresh-server install (2026-11-17), following sections 2 to 4a on a clean Ubuntu 24.04 machine (a privileged container with its own Docker data disk, so Docker runs as on a real server, but no systemd and no public DNS): `get.docker.com` installed Docker with Compose 98 s after start; `./deploy/install.sh webmail.foxalora.test --self-signed` generated the secrets and certificate, built both images, ran migrations, waited for a healthy API and printed the setup link; **bare machine to setup link: 178 s**. The wizard, opened at the real host name, showed all six checks green, the connection test first failed SMTP with "same server" ticked and offered smtp.gmail.com, then passed both; finishing saved tenant, owner, server (with "saves sent mail itself"), domain and audit, and the setup routes then answered 404. HTTP redirects to HTTPS, an unknown host name is refused, a Gmail login with a wrong password reaches Gmail and gets the generic failure; no admin password, setup token or mailbox password in the API log. `install.sh` needs a host name with a dot (`localhost` is refused).
+
+Not yet tested: `enable.sh`, `tester.sh` and `gate.sh` with `docker compose` end to end, Let's Encrypt issue and renewal, an ARM64 build, a real server on the internet, the wizard's connection test with a real test mailbox login.

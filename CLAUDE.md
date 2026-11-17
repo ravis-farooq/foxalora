@@ -29,7 +29,7 @@ A hosting company adopts this only if three things hold, so treat them as produc
 | `docs/Foxalora-Jira-Import.csv` | Same backlog for Jira import. |
 | `README.md` | How to run the prototype. |
 | `docs/DEVELOPER_HANDOFF.md` | Onboarding for team developers: setup, test accounts, security and UX rules, decisions, how to contribute. Keep it current. |
-| `deploy/`, `backend/Dockerfile`, `frontend/Dockerfile` | Production install for test and pilot servers (`deploy/install.sh`, `deploy/cli.sh`, Compose with Nginx, API, PostgreSQL, Valkey; guide in `docs/runbooks/install.md`). Images built and the stack tested in production mode with plain docker on 2026-11-16; `install.sh` with Compose and Let's Encrypt not yet run on a real server. |
+| `deploy/`, `backend/Dockerfile`, `frontend/Dockerfile` | Production install for test and pilot servers (`deploy/install.sh`, `deploy/cli.sh`, Compose with Nginx, API, PostgreSQL, Valkey; guide in `docs/runbooks/install.md`). Images built and the stack tested in production mode with plain docker on 2026-11-16; `install.sh` with Compose and the setup wizard run on a fresh Ubuntu 24.04 machine on 2026-11-17 (bare machine to setup link in 178 s, self-signed); Let's Encrypt on a public server not yet tested. |
 | `docs/LAUNCH_KIT.md` | Go-to-market drafts. Do not publish claims marked [after v1.0] before they are true. |
 
 If two documents disagree, the PRD wins on scope and the SAD wins on design. Report the conflict instead of picking silently.
